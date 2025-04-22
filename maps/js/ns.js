@@ -1,5 +1,5 @@
 import { getColor, style, highlightFeature, isMobileDevice } from './shared.js';
-import { getPlaceHist } from '../api_utils.js';
+import { getPlaceHist } from '../../js/api_utils.js';
 
 let csvData;
 let geojsonData;

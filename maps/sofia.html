@@ -141,7 +141,7 @@
     loadGeoJSON('apr21').then(initializeMap); 
 
     function loadCSV(el_date) {
-        const csvFilename = "../../assets/data/mestni/sofia_" + el_date + "_pct.csv";
+        const csvFilename = "../assets/data/mestni/sofia_" + el_date + "_pct.csv";
     
         return new Promise((resolve, reject) => {
             Papa.parse(csvFilename, {
@@ -177,7 +177,7 @@
     }
 
     function loadGeoJSON(el_date) {
-      const jsonFile = "../../assets/data/mestni/sofia_" + el_date + ".json";
+      const jsonFile = "../assets/data/mestni/sofia_" + el_date + ".json";
       console.log(jsonFile);
 
       return fetch(jsonFile)
