@@ -80,15 +80,15 @@
     <div id="map"></div>
     <div class="dropdown-container">
         <select id="csvDropdown">
-            <option value="../assets/data/2013-05-12ns_mun.csv">Май 2013</option>
-            <option value="../assets/data/2014-10-05ns_mun.csv">Април 2014</option>
-            <option value="../assets/data/2017-03-26ns_mun.csv">Март 2017</option>
-            <option value="../assets/data/2021-04-04ns_mun.csv">Април 2021</option>
-            <option value="../assets/data/2021-07-11ns_mun.csv">Юли 2021</option>
-            <option value="../assets/data/2021-11-14ns_mun.csv">Ноември 2021</option>
-            <option value="../assets/data/2022-10-02ns_mun.csv">Октомври 2022</option>
-            <option value="../assets/data/2023-04-02ns_mun.csv">Април 2023</option>
-            <option value="../assets/data/2024-06-09ns_mun.csv" selected>Юни 2024 НС</option>
+            <option value="../assets/data/el_data/2013-05-12ns_mun.csv">Май 2013</option>
+            <option value="../assets/data/el_data/2014-10-05ns_mun.csv">Април 2014</option>
+            <option value="../assets/data/el_data/2017-03-26ns_mun.csv">Март 2017</option>
+            <option value="../assets/data/el_data/2021-04-04ns_mun.csv">Април 2021</option>
+            <option value="../assets/data/el_data/2021-07-11ns_mun.csv">Юли 2021</option>
+            <option value="../assets/data/el_data/2021-11-14ns_mun.csv">Ноември 2021</option>
+            <option value="../assets/data/el_data/2022-10-02ns_mun.csv">Октомври 2022</option>
+            <option value="../assets/data/el_data/2023-04-02ns_mun.csv">Април 2023</option>
+            <option value="../assets/data/el_data/2024-06-09ns_mun.csv" selected>Юни 2024 НС</option>
         </select>
         <br>
         <select id="columnsDropdown"></select>
@@ -138,11 +138,11 @@
     }
     
     function loadGeoJSON() {
-      return fetch("../assets/data/municipalities.json")
+      return fetch("../assets/data/geo/municipalities.json")
         .then((response) => response.json())
         .then((data) => {
           geojsonData = data;
-          return loadCSV({ target: { value: "../assets/data/2024-06-09ns_mun.csv" } }); 
+          return loadCSV({ target: { value: "../assets/data/el_data/2024-06-09ns_mun.csv" } }); 
         });
     }
 

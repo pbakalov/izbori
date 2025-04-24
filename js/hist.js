@@ -311,7 +311,7 @@ const partyCombobox = new CSVCombobox('../assets/data/parties.csv', { // TODO ge
 await partyCombobox.init(); // some overhead, as it's called in the constructor
 
 populateComboBox(
-    "../assets/data/place_data.csv", //TODO get place data from API/repo
+    "../assets/data/geo/place_data.csv", //TODO get place data from API/repo
     "placeCombobox", 
     "placeOptions"
 ).then(() => {
