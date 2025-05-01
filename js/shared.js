@@ -1,3 +1,6 @@
+export const BASEURL = "/izbori";
+export const GHP_ROOT = "https://pbakalov.github.io";
+
 export class CSVCombobox {
     constructor(csvFilePath, {
         labelColumnIndex = 1,

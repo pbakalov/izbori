@@ -1,4 +1,5 @@
 plugins:
   - jekyll-redirect-from
 title: "Избори в България"
+baseurl: "/izbori"
 
