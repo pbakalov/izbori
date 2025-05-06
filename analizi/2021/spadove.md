@@ -613,4 +613,3 @@ redirect_from:
 
 ![36511](https://pbakalov.github.io/assets/2021/spadove/36511.png)
 [резултати по секции (таблица)](https://pbakalov.github.io/assets/2021/spadove/36511.html)
-

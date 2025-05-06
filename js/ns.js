@@ -1,5 +1,6 @@
 import { getColor, style, highlightFeature, isMobileDevice } from './maps_shared.js';
 import { getPlaceHist } from './api_utils.js';
+import { GHP_ROOT } from './shared.js';
 
 let csvData;
 let geojsonData;
@@ -39,7 +40,7 @@ function loadCSV(csvFilename) {
 
 function loadGeoJSON() {
   return new Promise((resolve, reject) => {
-    fetch("../../assets/data/geo/settlements_simplified1pct.json")
+    fetch("../assets/data/geo/settlements_simplified1pct.json")
       .then((response) => response.json())
       .then((data) => {
         geojsonData = data;
@@ -237,7 +238,7 @@ function initializeMap() {
 function set_el_and_party(el, party) {
     const csvDropdown = document.getElementById('csvDropdown');
     const options = Array.from(csvDropdown.options).map(option => option.value);
-    const selectedCsv = `../../assets/data/el_data/${el}`;
+    const selectedCsv = `../assets/data/el_data/${el}`;
 
     if (options.includes(selectedCsv)) {
         csvDropdown.value=selectedCsv; //does not trigger event listeners
@@ -485,9 +486,9 @@ function updateSusLayer(markerData, markerGroup) {
         id = id.replace(/^0+/, "");
 
         var popupContent = `${feature.properties.name}, общ. ${feature.properties.obsht_name} (${id})</b><br>`;
-        popupContent += `<img src="../../assets/2021/spadove/${id}.png" style="width:500px; height:auto;" />`; // needs fixing
-        popupContent += `<br><a href="../../assets/2021/spadove/${id}.html" target="_blank">Виж секции</a>`; // needs fixing
-        popupContent += ' <a href="../2021/top.html" target="_blank">Защо има карфица тук?</a>';
+        popupContent += `<img src="${GHP_ROOT}/assets/2021/spadove/${id}.png" style="width:500px; height:auto;" />`;
+        popupContent += `<br><a href="${GHP_ROOT}/assets/2021/spadove/${id}.html" target="_blank">Виж секции</a>`;
+        popupContent += ' <a href="../analizi/2021/top.html" target="_blank">Защо има карфица тук?</a>';
         
         L.marker([point[1], point[0]])
             .addTo(markerGroup)

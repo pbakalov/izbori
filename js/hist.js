@@ -299,7 +299,7 @@ const el = urlParams.get('el');
 const sid = urlParams.get('sid');
 const party = urlParams.get('party');
 
-const partyCombobox = new CSVCombobox('../assets/data/parties.csv', { // TODO get party list from API
+const partyCombobox = new CSVCombobox(`assets/data/parties.csv`, { // TODO get party list from API
     inputId: 'partyCombobox',
     listId: 'partyOptionsList',
     hiddenValueId: 'partySelectedValue',
@@ -311,7 +311,7 @@ const partyCombobox = new CSVCombobox('../assets/data/parties.csv', { // TODO ge
 await partyCombobox.init(); // some overhead, as it's called in the constructor
 
 populateComboBox(
-    "../assets/data/geo/place_data.csv", //TODO get place data from API/repo
+    `assets/data/geo/place_data.csv`, //TODO get place data from API/repo
     "placeCombobox", 
     "placeOptions"
 ).then(() => {
