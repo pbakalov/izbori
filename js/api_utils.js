@@ -28,6 +28,13 @@ export async function getPlaceHist(ekatte, party) {
     return data;
 }
 
+export async function getDeltas(party, el) {
+    const url=`${ApiBaseUrl}/delta?party=${party}&el=${el}`;
+
+    const data = await fetchData(url);
+    return data;
+}
+
 async function fetchData(url) {
     try {
         const response = await fetch(url);
