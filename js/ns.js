@@ -1,14 +1,18 @@
-import { getColor, style, highlightFeature, isMobileDevice } from './maps_shared.js';
-import { getPlaceHist } from './api_utils.js';
+import { getColor, style, highlightFeature, isMobileDevice, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
+import { getPlaceHist, getDeltas } from './api_utils.js';
 import { GHP_ROOT } from './shared.js';
 
 let csvData;
 let geojsonData;
 let markerData;
 let markerGroup;
+
+let mapType = 'result';
 let map;
 let geojsonLayer;
 var info = L.control();
+var legend = createLegend(mapType);
+
 let selectedColumn = null;
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
@@ -18,6 +22,16 @@ document.getElementById("csvDropdown").addEventListener("change", function(event
 document.getElementById("columnsDropdown").addEventListener("change", updateColumn);
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
 document.getElementById('hideInfo').addEventListener('click', closeInfoBox);
+
+const radios = document.querySelectorAll('input[name="choice"]');
+
+radios.forEach(radio => {
+  radio.addEventListener('change', function(event) {
+    if (event.target.checked) {
+      updateMapType(event);
+    }
+  });
+});
 
 loadGeoJSON().then(initializeMap);
 
@@ -63,21 +77,29 @@ function loadMarkerData(file) {
     .catch(error => console.error('Error fetching marker data:', error));
 }
 
-function matchData(columnName) {
+async function matchData(columnName, el) { 
+  const deltas = await getDeltas(columnName, el);
   geojsonData.features.forEach((feature) => {
     const match = csvData.find((row) => ('00000' + row.id).slice(-5) === feature.properties.ncode); 
     if (match) {
-      feature.properties[columnName] = match[columnName];
+      feature.properties['value'] = match[columnName];
+      feature.properties['delta'] = deltas['delta'][feature.properties.ncode.replace(/^0+/, '')];
+      feature.properties['delta_votes'] = deltas['delta_votes'][feature.properties.ncode.replace(/^0+/, '')];
+      feature.properties['el_ref'] = deltas['meta']['el_ref'];
+      feature.properties['el'] = deltas['meta']['el'];
       if (columnName !=='total') {
-        feature.properties[`${columnName}_prop`] = match[columnName]/match['total'];
+        feature.properties['value_prop'] = match[columnName]/match['total'];
       } else {
-        feature.properties[`${columnName}_prop`] = match[columnName]/match['eligible_voters'];
+        feature.properties['value_prop'] = match[columnName]/match['eligible_voters'];
       };
       feature.properties['total'] = match['total']; 
       feature.properties['eligible_voters'] = match['eligible_voters']; 
       feature.properties['активност'] = match['total']/match['eligible_voters']; 
     } else {
-      feature.properties[columnName] = NaN;
+      feature.properties['value'] = NaN;
+      feature.properties['value_prop'] = NaN;
+      feature.properties['delta'] = NaN;
+      feature.properties['delta_votes'] = NaN;
       feature.properties['total'] = NaN; 
       feature.properties['eligible_voters'] = NaN; 
       feature.properties['активност'] = NaN; 
@@ -129,7 +151,7 @@ function initializeMap() {
   }).addTo(map);
 
   geojsonLayer = L.geoJson(geojsonData, {
-    style: (feature) => style(feature, selectedColumn),
+    style: (feature) => style(feature, mapType),
   	onEachFeature: onEachFeature
   }).addTo(map);
 
@@ -167,28 +189,6 @@ function initializeMap() {
 
   info.addTo(map);
 
-  var legend = L.control({position: 'bottomleft'});
-
-  legend.onAdd = function (map) {
-
-      var div = L.DomUtil.create('div', 'info legend');
-      var grades = [0, 0.05, 0.1, .2, .4, .6, .7, .8]; 
-      var labels = [];
-      var from, to;
-
-      for (var i = 0; i < grades.length; i++) {
-          from = grades[i];
-          to = grades[i + 1];
-
-          labels.push(
-              '<i style="background:' + getColor(from + 0.0001) + '"></i> ' +
-              from + (to ? '&ndash;' + to : '+'));
-      }
-
-      div.innerHTML = labels.join('<br>');
-      return div;
-  };
-
   legend.addTo(map);
 
   L.Control.InfoButton = L.Control.extend({ // TODO simpler with <button>
@@ -221,6 +221,7 @@ function initializeMap() {
   const lat = parseFloat(urlParams.get('lat'));
   const lng = parseFloat(urlParams.get('lng'));
   const zoom = parseInt(urlParams.get('zoom'), 10);
+  setMapType(urlParams.get('type'));
 
   if (lat && lng && zoom) {
       map.setView([lat, lng], zoom);
@@ -232,7 +233,6 @@ function initializeMap() {
   set_el_and_party(el, party);
   
   map.on('moveend zoomend', updateUrlWithMapState);
-
 }
 
 function set_el_and_party(el, party) {
@@ -256,13 +256,14 @@ const updateUrlWithMapState = () => {
     const el = parts[parts.length-1];
     const party = document.getElementById('columnsDropdown').value;
 
-    const newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}`;
+    const newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
     window.history.replaceState(null, '', newUrl);
 };
 
 function populateDropdown(colOverride=null) {
   
-  const parts = document.getElementById('csvDropdown').value;
+  const parts = document.getElementById('csvDropdown').value.split('/');
+  const el = parts[parts.length-1].split('.')[0];
 
   const dropdown = document.getElementById("columnsDropdown");
   const columns = Object.keys(csvData[0]);
@@ -302,13 +303,11 @@ function populateDropdown(colOverride=null) {
     selectedColumn = colOverride;
   };
 
-  matchData(selectedColumn);
-  geojsonLayer.setStyle(feature => {
-    return {
-      fillColor: getColor(feature.properties[`${selectedColumn}_prop`]),
-      
-    };
-  });
+  matchData(selectedColumn, el).then(() => {
+    geojsonLayer.setStyle(feature => {
+      return getFeatureColor(feature, mapType);
+    });
+  })
 
   info.update(undefined, selectedColumn);
   updateUrlWithMapState();
@@ -316,15 +315,32 @@ function populateDropdown(colOverride=null) {
 
 function updateColumn(event) {
   selectedColumn = event.target.value;
-  matchData(selectedColumn);
-  geojsonLayer.setStyle(feature => {
-    return {
-      fillColor: getColor(feature.properties[`${selectedColumn}_prop`]),
-      
-    };
-  });
+  const parts = document.getElementById('csvDropdown').value.split('/');
+  const el = parts[parts.length-1].split('.')[0];
+  matchData(selectedColumn, el).then(() => {
+    geojsonLayer.setStyle(feature => {
+      return getFeatureColor(feature, mapType);
+    });
+  })
   info.update(undefined, selectedColumn);
   updateUrlWithMapState();
+}
+
+function updateMapType(event) {
+    mapType = event.target.value;
+
+    // update colors
+    geojsonLayer.setStyle(feature => {
+      return getFeatureColor(feature, mapType);
+    });
+
+    // update legend
+    map.removeControl(legend);
+    legend = createLegend(mapType);
+    legend.addTo(map);
+
+    // update url
+    updateUrlWithMapState();
 }
 
 function generateTextbox(props, selectedColumn) {
@@ -345,8 +361,9 @@ function generateTextbox(props, selectedColumn) {
         textbox += `<b>${props.name}, общ. ${props.obsht_name} (${props.ncode})</b><br>`;
 
         if (selectedColumn !== 'total') {
-            textbox += selectedColumn + ' гласове: ' +  props[selectedColumn] + '<br>' 
-            textbox += `${selectedColumn} (%): ${isNaN(props[selectedColumn]) ? 'н.д.' : (100*props[selectedColumn]/props['total']).toFixed(1)}<br>`
+            textbox += `${selectedColumn} <br>гласове: ${props['value']} (`
+            textbox += `${isNaN(props['value']) ? 'н.д.' : (100*props['value']/props['total']).toFixed(1)}%)<br>`
+            // TODO: add previous and last total 
         } else {
             // TODO: breakdown initial voter list, added to voter list, total 
             textbox += 'Общо гласували: ' +  props['total'] + '<br>' 
@@ -355,6 +372,9 @@ function generateTextbox(props, selectedColumn) {
             textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
             textbox += `Активност (%): ${isNaN(props['total']) ? 'н.д.' : (100*props['total']/props['eligible_voters']).toFixed(1)}<br>`
         }
+        textbox += `<b>Промяна</b> спрямо ${props['el_ref']}:<br>`
+        textbox += `${isNaN(props['delta']) ? 'н.д.' : (100*props['delta']).toFixed(1)}% `
+        textbox += `(${isNaN(props['delta_votes']) ? 'н.д.' : props['delta_votes']} гласа)<br>`
         textbox += table + '<br>'
         textbox += 'Общо гласували (вкл. невалидни): ' +  props['total']  + '<br>'
         textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
@@ -430,41 +450,6 @@ async function getTsData(party, ekatte) {
     return tsData;
 }
 
-function JsonToTable(data) {
-    const skip = ['place', 'region_name', 'invalid', 'municipality_name'];
-    const renameMap = { // TODO move to shared
-        'invalid' : 'Невалидни',
-        'eligible_voters' : 'По списък',
-        'n_stations' : 'Секции',
-        'invalid' : 'Невалидни',
-        'total' : 'Общо гласували',
-        'npn' : 'Не подкрепям никого',
-    }
-
-    let thead = '<table><thead><tr><th>Дата</th>';
-    for (let key in data) {
-        if (!skip.includes(key))  {
-            thead += `<th>${renameMap[key]||key}</th>`;
-        }
-    }
-    thead += '</tr></thead>';
-    
-    let tbody = '<tbody>';
-
-    const dates = Object.keys(data.eligible_voters);
-
-    dates.forEach(date => {
-        tbody += `<tr><td>${date}</td>`;
-        for (let key in data) {
-            if (!skip.includes(key)) tbody += `<td>${data[key][date]}</td>`;
-        }
-        tbody += '</tr>';
-    });
-    tbody += '</tbody></table>';
-
-    return thead + tbody;
-}
-
 function updatePins (event) {
   const selectedSus = event.target.value;
   var markerData;
@@ -503,3 +488,12 @@ function updateSusLayer(markerData, markerGroup) {
   });
 };
 
+function setMapType(value) {
+  const radioToCheck = Array.from(radios).find(radio => radio.value === value);
+  if (radioToCheck) {
+    radioToCheck.checked = true;
+
+    const event = new Event('change', { bubbles: true });
+    radioToCheck.dispatchEvent(event);
+  }
+}
