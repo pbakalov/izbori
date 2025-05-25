@@ -1,6 +1,6 @@
-import { getColor, style, highlightFeature, isMobileDevice, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
+import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
 import { getPlaceHist, getDeltas } from './api_utils.js';
-import { GHP_ROOT } from './shared.js';
+import { GHP_ROOT, isMobile } from './shared.js';
 
 let csvData;
 let geojsonData;
@@ -126,18 +126,23 @@ function onEachFeature(feature, layer) {
         },
         click: function(e) {
             map.fitBounds(e.target.getBounds()); // zoom to feature
-            getTsData(selectedColumn, feature.properties.ncode).then(
-                tsData => {
-                const popupContent = JsonToTable(tsData); // TODO show figure instead of table
-                const sids = `<br><a href="../hist.html?ekatte=${feature.properties.ncode}">виж секции</a>`;
-                layer.setPopupContent(
-                    `${defaultPopup}${popupContent}${sids}`
-                );
-            })
-            .catch(error => {
-                console.error('Error fetching data:', error);
-                layer.setPopupContent('Грешка.');
-            });
+            if (!isMobile()) {
+                getTsData(selectedColumn, feature.properties.ncode).then(
+                    tsData => {
+                    const popupContent = JsonToTable(tsData); // TODO show figure instead of table
+                    const sids = `<br><a href="../hist.html?ekatte=${feature.properties.ncode}">виж секции</a>`;
+                    layer.setPopupContent(
+                        `${defaultPopup}${popupContent}${sids}`
+                    );
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                    layer.setPopupContent('Грешка.');
+                });
+            } else {
+                highlightFeature(e);
+                info.update(layer.feature.properties, selectedColumn);
+            }
         },
 	});
 }
@@ -167,7 +172,7 @@ function initializeMap() {
 
     this._div.innerHTML = '';
     var closeButton;
-    if (props && isMobileDevice()) {
+    if (props && isMobile()) {
         closeButton = L.DomUtil.create('button', 'close-btn', this._div);
         closeButton.innerHTML = 'x';
         closeButton.style.float = 'right';
@@ -176,7 +181,7 @@ function initializeMap() {
     let contentDiv = L.DomUtil.create("div", "info-content", this._div);
     contentDiv.innerHTML = textbox;
 
-    if (props && isMobileDevice()) {
+    if (props && isMobile()) {
         L.DomEvent.on(closeButton, 'click', () => {
             this.close();
         });
@@ -185,6 +190,7 @@ function initializeMap() {
 
   info.close = function() { // why does this close the popup in addition to the infobox?
       info.update(undefined, selectedColumn);
+      // TODO reset the style of the clicked feature 
   };
 
   info.addTo(map);
@@ -380,6 +386,9 @@ function generateTextbox(props, selectedColumn) {
         textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
         textbox += `Гласували/избиратели по списък: ${isNaN(props['total']) ? 'н.д.' : (props['total']/props['eligible_voters']).toFixed(2)}<br>`
         textbox += `Брой секции: ${targetRow ? targetRow['n_stations'] : 0}<br>`
+        // if (isMobile()) {
+        // add button to show election history OR add it here directly
+        //}
     } else {
         textbox += 'Посочете населено место.'
     };
