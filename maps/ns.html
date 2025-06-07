@@ -41,6 +41,7 @@
             </select><br>
             </label>
             <br>
+            Оцвети според:
             <form>
               <label>
                 <input type="radio" name="choice" value="result" checked>
@@ -52,6 +53,16 @@
                 Промяна
               </label>
             </form>
+            <br>
+            <label for="minDeltaVotes">Промяна от поне:</label>
+            <br>
+            <input type="range" id="minDeltaVotes" min="0" max="559" value=0 step="1"><br>
+            <span id="minDeltaVotesDisplay">0</span> гласа
+            <br>
+            <label for="minDelta">Промяна от поне:</label>
+            <br>
+            <input type="range" id="minDelta" min="0" max="7" value=0 step="0.1"><br>
+            <span id="minDeltaDisplay">0</span> %
         </div>
     </div>
     <div id="infoBox" class="info-box" style="display:none;">
