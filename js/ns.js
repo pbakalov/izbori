@@ -15,6 +15,9 @@ var legend = createLegend(mapType);
 
 let selectedColumn = null;
 
+let minDelta = 0;
+let minDeltaVotes = 0;
+
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     loadCSV(event.target.value).then(() => populateDropdown());
 });
@@ -22,6 +25,8 @@ document.getElementById("csvDropdown").addEventListener("change", function(event
 document.getElementById("columnsDropdown").addEventListener("change", updateColumn);
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
 document.getElementById('hideInfo').addEventListener('click', closeInfoBox);
+document.getElementById('minDelta').addEventListener('change', updateMinDelta);
+document.getElementById('minDeltaVotes').addEventListener('change', updateMinDeltaVotes);
 
 const radios = document.querySelectorAll('input[name="choice"]');
 
@@ -80,6 +85,7 @@ function loadMarkerData(file) {
 async function matchData(columnName, el) { 
   const deltas = await getDeltas(columnName, el);
   geojsonData.features.forEach((feature) => {
+
     const match = csvData.find((row) => ('00000' + row.id).slice(-5) === feature.properties.ncode); 
     if (match) {
       feature.properties['value'] = match[columnName];
@@ -313,6 +319,7 @@ function populateDropdown(colOverride=null) {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
+    applyFilter(minDelta, minDeltaVotes)
   })
 
   info.update(undefined, selectedColumn);
@@ -327,6 +334,7 @@ function updateColumn(event) {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
+    applyFilter(minDelta, minDeltaVotes)
   })
   info.update(undefined, selectedColumn);
   updateUrlWithMapState();
@@ -506,3 +514,51 @@ function setMapType(value) {
     radioToCheck.dispatchEvent(event);
   }
 }
+
+function createGeoJsonLayer(geoData, selectedEkatte=null) {
+  let geoLayer = L.geoJson(geoData, {
+    style: (feature) => style(feature, mapType),
+  	onEachFeature: onEachFeature,
+    filter: function(feature) {
+      //console.log(feature.properties.ncode);
+      if (selectedEkatte == null) {
+        return true;
+      } else {
+        return selectedEkatte.includes(feature.properties.ncode);
+      }
+    },
+  })
+
+  return geoLayer;
+}
+
+function updateMinDelta(event) {
+    let display = document.getElementById("minDeltaDisplay");
+    minDelta = event.target.value;
+    applyFilter(minDelta, minDeltaVotes);
+    display.innerHTML =  100*minDelta;
+}
+
+function updateMinDeltaVotes(event) {
+    let display = document.getElementById("minDeltaVotesDisplay");
+    minDeltaVotes = event.target.value;
+    applyFilter(minDelta, minDeltaVotes)
+    display.innerHTML =  minDeltaVotes;
+}
+
+function applyFilter(minDelta, minDeltaVotes) {
+
+    let selectedEkatte = [];
+    geojsonData.features.forEach((feature) => {
+        if ((Math.abs(feature.properties['delta']) >= (minDelta)) && (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes)) {
+            selectedEkatte.push(feature.properties.ncode);
+        }
+    })
+
+    map.removeLayer(geojsonLayer);
+
+    geojsonLayer = createGeoJsonLayer(geojsonData, selectedEkatte)
+    geojsonLayer.addTo(map);
+    //updateUrlWithMapState(); //TODO
+}
+
