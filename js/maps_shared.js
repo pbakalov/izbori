@@ -8,29 +8,35 @@ export function getColor(d, mapType) {
 	    	d > .1   ? '#FEB24C' :
 	    	d > .05   ? '#FED976' : '#FFEDA0';
      } else {
-        if (d <= -0.85) return colors[0];
-        if (d <= -0.7) return colors[1];
-        if (d <= -0.25) return colors[2];
-        if (d <= -0.125) return colors[3];
-        if (d <= 0.125) return colors[4];
-        if (d <= 0.25) return colors[5];
-        if (d <= 0.5) return colors[6];
-        if (d <= 1.) return colors[7];
-        if (d > 1.) return colors[8];
+        if (d <= -0.95) return colors[0];
+        if (d <= -0.75) return colors[1];
+        if (d <= -0.5) return colors[2];
+        if (d <= -0.25) return colors[3];
+        if (d <= -0.125) return colors[4];
+        if (d <= 0.125) return colors[5];
+        if (d <= 0.25) return colors[6];
+        if (d <= 0.5) return colors[7];
+        if (d <= 1.) return colors[8];
+        if (d <= 2.) return colors[9];
+        if (d <= 4.) return colors[10];
+        if (d > 4.) return colors[11];
         return null;
      }
 }
 
-const colors = [ // red/blue
-  '#b2182b',
-  '#d6604d',
-  '#f4a582',
-  '#fddbc7',
-  '#f7f7f7',
-  '#d1e5f0',
-  '#92c5de',
-  '#4393c3',
-  '#2166ac',
+const colors = [ //plotly's RdBu
+    '#67001f',
+    '#b2182b',
+    '#d6604d',
+    '#f4a582',
+    '#fddbc7',
+    '#f7f7f7', // midpoint 
+    '#d7e8f1',
+    '#a7d0e4',
+    '#6bacd0',
+    '#3884bb',
+    '#1c5da0',
+    '#053061',
 ];
 
 export function style(feature, mapType) {
@@ -71,7 +77,7 @@ export function createLegend(mapType) {
   if (mapType === 'result') {
     grades = [0, 0.05, 0.1, .2, .4, .6, .7, .8]; 
   } else {
-    var grades = [-1, -0.75, -0.5, -0.25, -0.125, 0.125, 0.25, 0.5, 1.];
+    var grades = [-1, -0.95, -0.75, -0.5, -0.25, -0.125, 0.125, 0.25, 0.5, 1., 2., 4.];
   }
   newLegend.onAdd = function (map) {
 

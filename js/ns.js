@@ -549,11 +549,16 @@ function updateMinDeltaVotes(event) {
 function applyFilter(minDelta, minDeltaVotes) {
 
     let selectedEkatte = [];
-    geojsonData.features.forEach((feature) => {
-        if ((Math.abs(feature.properties['delta']) >= (minDelta)) && (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes)) {
-            selectedEkatte.push(feature.properties.ncode);
-        }
-    })
+
+    if ((minDelta>0) || (minDeltaVotes>0)) {
+        geojsonData.features.forEach((feature) => {
+            if ((Math.abs(feature.properties['delta']) >= (minDelta)) && (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes)) {
+                selectedEkatte.push(feature.properties.ncode);
+            }
+        })
+    } else {
+        selectedEkatte = null; // show all
+    }
 
     map.removeLayer(geojsonLayer);
 
