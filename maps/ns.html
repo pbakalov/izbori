@@ -13,6 +13,11 @@
     <div class="map-container">
         <div id="map"></div>
         <div class="dropdown-container">
+            <button id="menuToggle" class="menu-toggle">
+                <span class="menu-icon">☰</span>
+                <span class="menu-text">Меню</span>
+            </button>
+            <div class="menu-content">
             <select id="csvDropdown">
                 <option value="../assets/data/el_data/2013-05-12ns.csv">Май 2013</option>
                 <option value="../assets/data/el_data/2014-10-05ns.csv">Април 2014</option>
@@ -63,6 +68,7 @@
             <br>
             <input type="range" id="minDelta" min="0" max="7" value=0 step="0.1"><br>
             <span id="minDeltaDisplay">0</span> %
+            </div>
         </div>
     </div>
     <div id="infoBox" class="info-box" style="display:none;">
