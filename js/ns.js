@@ -115,11 +115,13 @@ async function matchData(columnName, el) {
 
 function onEachFeature(feature, layer) {
     const defaultPopup = `<h3>${feature.properties.name}, общ.${feature.properties.obsht_name}, обл.${feature.properties.oblast_name}</h3>`;
-    
-    layer.bindPopup(
-        `${defaultPopup}Зарежда се... (ако виждаш това, вероятно сървърът се буди)`,
-        {maxWidth: 600}
-    );
+   
+    if (!isMobile()) { 
+        layer.bindPopup(
+            `${defaultPopup}Зарежда се... (ако виждаш това, вероятно сървърът се буди)`,
+            {maxWidth: 600}
+        );
+    }
 
     layer.on({
         mouseover: function(e) {
@@ -566,4 +568,37 @@ function applyFilter(minDelta, minDeltaVotes) {
     geojsonLayer.addTo(map);
     //updateUrlWithMapState(); //TODO
 }
+
+// Mobile menu toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const menuToggle = document.getElementById('menuToggle');
+    const menuContent = document.querySelector('.menu-content');
+
+    if (menuToggle && menuContent) {
+        menuToggle.addEventListener('click', function() {
+            menuContent.classList.toggle('show');
+            // Update button text based on state
+            const menuText = menuToggle.querySelector('.menu-text');
+            const menuIcon = menuToggle.querySelector('.menu-icon');
+            if (menuContent.classList.contains('show')) {
+                menuText.textContent = 'Затвори';
+                menuIcon.textContent = '×';
+            } else {
+                menuText.textContent = 'Меню';
+                menuIcon.textContent = '☰';
+            }
+        });
+
+        // Close menu when clicking on map
+        map.addEventListener('click', function() {
+            if (menuContent.classList.contains('show')) {
+                menuContent.classList.remove('show');
+                const menuText = menuToggle.querySelector('.menu-text');
+                const menuIcon = menuToggle.querySelector('.menu-icon');
+                menuText.textContent = 'Меню';
+                menuIcon.textContent = '☰';
+            }
+        });
+    }
+});
 
