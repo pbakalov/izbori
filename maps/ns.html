@@ -34,19 +34,7 @@
             <br>
             <select id="columnsDropdown"></select><br>
             <label>
-            <br>Топ спадове юли 2021 (<a href="../2021/top.html" target="_blank">инфо</a>):<br>
-            <select id="pinsDropdown">
-                <option value=""selected>скрити</option>
-                <option value="../assets/data/sus/sus2021.json">активност</option>
-                <option value="../assets/data/sus/sus2021gerb.json">ГЕРБ-СДС</option>
-                <option value="../assets/data/sus/sus2021dps.json">ДПС</option>
-                <option value="../assets/data/sus/sus2021bsp.json">БСП</option>
-
-                <!--<option value="../../assets/data/sus2021rbg.json">Републиканци за БГ</option>-->
-            </select><br>
-            </label>
-            <br>
-            Оцвети според:
+            <b>Оцвети според:</b>
             <form>
               <label>
                 <input type="radio" name="choice" value="result" checked>
@@ -58,16 +46,36 @@
                 Промяна
               </label>
             </form>
+            <br><b>Филтри</b><br>
+
+            <label for="minDeltaVotes">Промяна от поне:</label><br>
+            <input type="range" id="minDeltaVotes" min="0" max="559" value=0 step="1">
+            <span id="minDeltaVotesDisplay">0</span> гласа<br>
+
+            <label for="minDelta">Промяна от поне:</label><br>
+            <input type="range" id="minDelta" min="0" max="7" value=0 step="0.1">
+            <span id="minDeltaDisplay">0</span> %<br>
+
+            <label for="minSupportVotes">Подкрепа над:</label><br>
+            <input type="range" id="minSupportVotes" min="0" max="1000" value=0 step="5">
+            <span id="minSupportVotesDisplay">0</span> гласа<br>
+
+            <label for="minSupport">Подкрепа над:</label><br>
+            <input type="range" id="minSupport" min="0" max="1" value=0 step="0.05">
+            <span id="minSupportDisplay">0</span> %
+
+            <br><br><b>Топ спадове юли 2021<b> (<a href="../2021/top.html" target="_blank">инфо</a>):<br>
+            <select id="pinsDropdown">
+                <option value=""selected>скрити</option>
+                <option value="../assets/data/sus/sus2021.json">активност</option>
+                <option value="../assets/data/sus/sus2021gerb.json">ГЕРБ-СДС</option>
+                <option value="../assets/data/sus/sus2021dps.json">ДПС</option>
+                <option value="../assets/data/sus/sus2021bsp.json">БСП</option>
+
+                <!--<option value="../../assets/data/sus2021rbg.json">Републиканци за БГ</option>-->
+            </select><br>
+            </label>
             <br>
-            <label for="minDeltaVotes">Промяна от поне:</label>
-            <br>
-            <input type="range" id="minDeltaVotes" min="0" max="559" value=0 step="1"><br>
-            <span id="minDeltaVotesDisplay">0</span> гласа
-            <br>
-            <label for="minDelta">Промяна от поне:</label>
-            <br>
-            <input type="range" id="minDelta" min="0" max="7" value=0 step="0.1"><br>
-            <span id="minDeltaDisplay">0</span> %
             </div>
         </div>
     </div>

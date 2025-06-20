@@ -17,6 +17,8 @@ let selectedColumn = null;
 
 let minDelta = 0;
 let minDeltaVotes = 0;
+let minSupport = 0;
+let minSupportVotes = 0;
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     loadCSV(event.target.value).then(() => populateDropdown());
@@ -27,6 +29,8 @@ document.getElementById("pinsDropdown").addEventListener("change", updatePins);
 document.getElementById('hideInfo').addEventListener('click', closeInfoBox);
 document.getElementById('minDelta').addEventListener('change', updateMinDelta);
 document.getElementById('minDeltaVotes').addEventListener('change', updateMinDeltaVotes);
+document.getElementById('minSupport').addEventListener('change', updateMinSupport);
+document.getElementById('minSupportVotes').addEventListener('change', updateMinSupportVotes);
 
 const radios = document.querySelectorAll('input[name="choice"]');
 
@@ -231,7 +235,7 @@ function initializeMap() {
 
   markerGroup = L.layerGroup().addTo(map);
 
-  const urlParams = new URLSearchParams(window.location.search);
+  const urlParams = new URLSearchParams(window.location.search); // TODO separate setState() func
   const lat = parseFloat(urlParams.get('lat'));
   const lng = parseFloat(urlParams.get('lng'));
   const zoom = parseInt(urlParams.get('zoom'), 10);
@@ -246,6 +250,18 @@ function initializeMap() {
 
   set_el_and_party(el, party);
   
+  minDelta =  parseFloat(urlParams.get('minDelta') || 0.);
+  minSupport =  parseFloat(urlParams.get('minSupport') || 0.);
+  minDeltaVotes =  parseInt(urlParams.get('minDeltaVotes') || 0);
+  minSupportVotes =  parseInt(urlParams.get('minSupportVotes') || 0);
+
+  setSlider(urlParams, 'minDelta');
+  setSlider(urlParams, 'minDeltaVotes');
+  setSlider(urlParams, 'minSupport');
+  setSlider(urlParams, 'minSupportVotes');
+
+  applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes);
+
   map.on('moveend zoomend', updateUrlWithMapState);
 }
 
@@ -270,7 +286,12 @@ const updateUrlWithMapState = () => {
     const el = parts[parts.length-1];
     const party = document.getElementById('columnsDropdown').value;
 
-    const newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
+    let newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
+    newUrl += `&minDelta=${minDelta}`;
+    newUrl += `&minDeltaVotes=${minDeltaVotes}`;
+    newUrl += `&minSupport=${minSupport}`;
+    newUrl += `&minSupportVotes=${minSupportVotes}`;
+
     window.history.replaceState(null, '', newUrl);
 };
 
@@ -321,7 +342,7 @@ function populateDropdown(colOverride=null) {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
-    applyFilter(minDelta, minDeltaVotes)
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
   })
 
   info.update(undefined, selectedColumn);
@@ -336,7 +357,7 @@ function updateColumn(event) {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
-    applyFilter(minDelta, minDeltaVotes)
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
   })
   info.update(undefined, selectedColumn);
   updateUrlWithMapState();
@@ -517,12 +538,26 @@ function setMapType(value) {
   }
 }
 
+function setSlider(urlParams, id) {
+  let factor;
+  let value;
+  if (id.includes('Votes')) {
+    factor = 1;
+    value =  parseInt(urlParams.get(id) || 0);
+  } else {
+    factor = 100;
+    value =  parseFloat(urlParams.get(id) || 0.);
+  }
+  const slider = document.getElementById(id);
+  slider.value = value;
+  document.getElementById(`${id}Display`).textContent = value*factor;
+}
+
 function createGeoJsonLayer(geoData, selectedEkatte=null) {
   let geoLayer = L.geoJson(geoData, {
     style: (feature) => style(feature, mapType),
   	onEachFeature: onEachFeature,
     filter: function(feature) {
-      //console.log(feature.properties.ncode);
       if (selectedEkatte == null) {
         return true;
       } else {
@@ -537,25 +572,44 @@ function createGeoJsonLayer(geoData, selectedEkatte=null) {
 function updateMinDelta(event) {
     let display = document.getElementById("minDeltaDisplay");
     minDelta = event.target.value;
-    applyFilter(minDelta, minDeltaVotes);
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes);
     display.innerHTML =  100*minDelta;
 }
 
 function updateMinDeltaVotes(event) {
     let display = document.getElementById("minDeltaVotesDisplay");
     minDeltaVotes = event.target.value;
-    applyFilter(minDelta, minDeltaVotes)
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
     display.innerHTML =  minDeltaVotes;
 }
 
-function applyFilter(minDelta, minDeltaVotes) {
+function updateMinSupport(event) {
+    let display = document.getElementById("minSupportDisplay");
+    minSupport = event.target.value;
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes);
+    display.innerHTML =  100*minSupport;
+}
+
+function updateMinSupportVotes(event) {
+    let display = document.getElementById("minSupportVotesDisplay");
+    minSupportVotes = event.target.value;
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes);
+    display.innerHTML =  minSupportVotes;
+}
+
+function applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes) {
 
     let selectedEkatte = [];
 
-    if ((minDelta>0) || (minDeltaVotes>0)) {
+    if ((minDelta>0) || (minDeltaVotes>0) || (minSupport>0) || (minSupportVotes>0)) {
         geojsonData.features.forEach((feature) => {
-            if ((Math.abs(feature.properties['delta']) >= (minDelta)) && (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes)) {
-                selectedEkatte.push(feature.properties.ncode);
+            if (
+              (Math.abs(feature.properties['delta']) >= (minDelta)) && 
+              (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes) &&
+              (Math.abs(feature.properties['value_prop'])>=minSupport) &&
+              (Math.abs(feature.properties['value'])>=minSupportVotes)
+            ) {
+              selectedEkatte.push(feature.properties.ncode);
             }
         })
     } else {
@@ -566,7 +620,7 @@ function applyFilter(minDelta, minDeltaVotes) {
 
     geojsonLayer = createGeoJsonLayer(geojsonData, selectedEkatte)
     geojsonLayer.addTo(map);
-    //updateUrlWithMapState(); //TODO
+    updateUrlWithMapState();
 }
 
 // Mobile menu toggle functionality
@@ -584,17 +638,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 menuText.textContent = 'Затвори';
                 menuIcon.textContent = '×';
             } else {
-                menuText.textContent = 'Меню';
-                menuIcon.textContent = '☰';
-            }
-        });
-
-        // Close menu when clicking on map
-        map.addEventListener('click', function() {
-            if (menuContent.classList.contains('show')) {
-                menuContent.classList.remove('show');
-                const menuText = menuToggle.querySelector('.menu-text');
-                const menuIcon = menuToggle.querySelector('.menu-icon');
                 menuText.textContent = 'Меню';
                 menuIcon.textContent = '☰';
             }
