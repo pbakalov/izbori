@@ -79,16 +79,21 @@ function updatePlot(jsonData, parties, ekatte=null)  {
     let regName;
 
     if (ekatte!==null) { // ekatte plot
+        // TODO adapt for multiple ekatte
         cols = ['n_stations', 'eligible_voters', 'total'].concat(parties);
         placeName = jsonData['place'][dates[0]]; 
         munName = jsonData['municipality_name'][dates[dates.length-1]]; // TODO use NSI data instead of CEC data
         regName = jsonData['region_name'][dates[0]];
         tableHTML += `<h3>${placeName}, общ. ${munName}, ${regName}</h3>`; 
         title = `Резултати в ${placeName}`;
-    } else { // SID plot
+    } else if (sid!==null) { // sid plot
         cols = ['address', 'place', 'n_stations', 'eligible_voters', 'total'].concat(parties);
         tableHTML += `<h3>Данни за секция ${sid}</h3>`; 
         title = `Резултати секция ${sid}`;
+    } else { // election totals plot
+        cols = ['address', 'place', 'n_stations', 'eligible_voters', 'total'].concat(parties);
+        tableHTML += `<h3>Обобщени данни (всички секции)</h3>`; 
+        title = `Сумарни резултати (всички секции)`;
     }
 
     const traces = ['eligible_voters', 'total'].concat(parties);
@@ -236,7 +241,7 @@ async function populateComboBox(csvFilePath, inputId, datalistId) { //provides s
     const response = await fetch(csvFilePath);
     const csvText = await response.text();
     const rows = csvText.split("\n").map(row => row.trim());
-    rows.shift(); // Remove headers
+    rows.shift(); // remove headers
 
     const inputElement = document.getElementById(inputId);
     const dataList = document.getElementById(datalistId);
@@ -248,8 +253,6 @@ async function populateComboBox(csvFilePath, inputId, datalistId) { //provides s
         if (ekatte && place) {
             const option = document.createElement("option");
             option.value = `${place.trim()} (${municipality_name.trim()})`;
-            //option.value = ekatte.trim(); // ekatte shown in input/dropdown; no
-            //option.textContent = `${place.trim()} (${municipality_name.trim()})`;
             option.dataset.value = ekatte.trim(); 
             dataList.appendChild(option);
         }
@@ -269,7 +272,6 @@ async function populateComboBox(csvFilePath, inputId, datalistId) { //provides s
             console.log("Custom input:", selectedText);
         }
     });
-
 }
 
 function updateSelection() {
@@ -294,11 +296,8 @@ function updateSelection() {
         updateUrl(ekatte);
         showSidsByDate(ekatte);
         chart.innerHTML = '';
-    } else if (partyValue) {
-        const partyLabels = partyValue.split(',').map(value => { // wtf?
-            const partyOption = document.querySelector(`#partyOptionsList div[data-value="${value}"]`);
-            return partyOption ? partyOption.textContent : value;
-        });
+    } else if (partyValue) { // national totals
+        showPlaceHistory(ekatte, partyValue);
         updateUrl(null, null, partyValue);
     }
 }
@@ -315,7 +314,7 @@ function updateUrl (ekatte=null, sid=null, party=null, el=null) {
     window.history.replaceState(null, '', newUrl);
 };
 
-function updatePlaceInput(ekatte) {
+function updatePlaceInput(ekatte) { // TODO adjust for multiple ekatte
     const inputElement = document.getElementById('placeCombobox');
     const placeOptions = document.getElementById('placeOptions'); 
     const placeName = Array.from(placeOptions.children).find(
@@ -347,7 +346,7 @@ const loadingMsg = 'Зарежда се ...';
 const defaultParties = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Пеев;ДПС-Доган';
 
 const urlParams = new URLSearchParams(window.location.search); 
-const ekatte = parseInt(urlParams.get('ekatte'));
+const ekatte = urlParams.get('ekatte');
 const el = urlParams.get('el');
 const sid = urlParams.get('sid');
 const party = urlParams.get('party');
@@ -377,18 +376,20 @@ populateComboBox(
     "placeOptions"
 ).then(() => {
     initializeMobileMenu();
-    if (!isNaN(ekatte) && party!==null) {
+    if (ekatte!==null && party!==null) {
         updatePlaceInput(ekatte);
         partyCombobox.setOptions(party.split(';'));
-    } else if (!isNaN(ekatte) && el!==null) {
+    } else if (ekatte!==null && el!==null) {
         //TODO showPlaceDetails(el, ekatte);
         updatePlaceInput(ekatte);
-    } else if (!isNaN(ekatte)) {
+    } else if (ekatte!==null) {
         showSidsByDate(ekatte);
         updatePlaceInput(ekatte);
     } else if (el!==null && sid!==null) {
         showSidDetails(el, sid);
     } else if (sid!==null && party!==null) {
+        partyCombobox.setOptions(party.split(';'));
+    } else if (party!==null) {
         partyCombobox.setOptions(party.split(';'));
     } else {
         document.getElementById('text').innerHTML = '';
