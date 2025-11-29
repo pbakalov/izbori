@@ -1,5 +1,5 @@
 plugins:
   - jekyll-redirect-from
+  - jekyll-seo-tag
 title: "Избори в България"
 baseurl: "/izbori"
-
