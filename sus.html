@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Подозрителни секции</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel="stylesheet" href="css/sus.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Подозрителни секции</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="susFilterInput">Филтрирай по причина:</label>
+                <div class="filter-container">
+                    <input type="text" id="susFilterInput" class="filter-input" placeholder="Избери флаг">
+                    <div class="filter-options" id="filterOptions"></div>
+                    <div class="filter-tags" id="filterTags"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="loadingMsg" class="loading-msg" style="display: none;">Зарежда се...</div>
+        
+        <div id="counterMsg" class="counter-msg"></div>
+        
+        <div id="tableContainer">
+            <table id="susTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>SID</th>
+                        <th>Община</th>
+                        <th>Населено място</th>
+                        <th>Адрес</th>
+                        <th>Причина за включване</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+
+        <div id="contact">
+            За коментари и намерени грешки: <a href="https://twitter.com/petar_baka">@petar_baka</a>.
+        </div>
+    </div>
+
+    <script type='module' src="js/sus.js"></script>
+</body>
+</html>
