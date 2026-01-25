@@ -37,11 +37,30 @@ export async function getDeltas(party, el) {
 }
 
 export async function getSidsData(sids) {
-    const sidList = Array.isArray(sids) ? sids.join(';') : sids;
-    const url=`${ApiBaseUrl}/sid_data?sid=${sidList}`;
-
-    const response = await fetchData(url);
-    return response;
+    const sidArray = Array.isArray(sids) ? sids : [sids];
+    const batchSize = 400;
+    const allData = {};
+    
+    try {
+        // Process SIDs in batches
+        for (let i = 0; i < sidArray.length; i += batchSize) {
+            const batch = sidArray.slice(i, i + batchSize);
+            const sidList = batch.join(';');
+            const url = `${ApiBaseUrl}/sid_data?sid=${sidList}`;
+            
+            const response = await fetchData(url);
+            
+            if (response && response.data) {
+                // Merge batch results into allData
+                Object.assign(allData, response.data);
+            }
+        }
+        
+        return { data: allData };
+    } catch (error) {
+        console.error('Error fetching SIDs data in batches:', error);
+        return { data: {} };
+    }
 }
 
 async function fetchData(url) {
