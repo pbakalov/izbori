@@ -10,7 +10,11 @@ const susDataSources = {
     },
     'КС': {
         url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/ks50.csv',
-        label: 'КС'
+        label: 'КС_ТОП50'
+    },
+    'МАХАЛИ': {
+        url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/rom_sids.csv',
+        label: 'МАХАЛИ'
     }
 };
 
@@ -19,6 +23,10 @@ let sidFlagsMap = {}; // { sid: [label1, label2, ...] }
 let allSusSids = []; // all unique SIDs from all lists
 let sidLocationMap = {};
 
+// Filter state
+let selectedFilters = new Set(); // set of selected filter labels
+let allSidsData = []; // stores all SID data for filtering
+
 async function initPage() {
     try {
         // Load place data to map ekatte to municipality and place names
@@ -26,6 +34,9 @@ async function initPage() {
         
         // Load all SUS data sources and combine them
         await loadAllSusData();
+        
+        // Initialize filter options
+        initializeFilter();
         
         // Populate table
         await populateTable();
@@ -109,6 +120,7 @@ async function populateTable() {
     tableBody.innerHTML = '';
     
     try {
+        let rowNumber = 1;
         for (const sid of allSusSids) {
             try {
                 const sidDetails = await getSidDetails('2024-10-27ns', sid);
@@ -123,6 +135,13 @@ async function populateTable() {
                 
                 // Create table row
                 const row = document.createElement('tr');
+                
+                // Row number cell
+                const rowNumCell = document.createElement('td');
+                rowNumCell.className = 'row-number';
+                rowNumCell.textContent = rowNumber;
+                row.appendChild(rowNumCell);
+                rowNumber++;
                 
                 // SID cell (clickable)
                 const sidCell = document.createElement('td');
@@ -178,8 +197,126 @@ async function populateTable() {
         console.error('Error populating table:', error);
     } finally {
         document.getElementById('loadingMsg').style.display = 'none';
+        updateCounter();
     }
 }
 
 // Initialize page when DOM is ready
 document.addEventListener('DOMContentLoaded', initPage);
+
+function initializeFilter() {
+    const filterInput = document.getElementById('susFilterInput');
+    const filterOptions = document.getElementById('filterOptions');
+    const filterTags = document.getElementById('filterTags');
+    
+    // Get all unique filter labels
+    const allLabels = new Set();
+    for (const labels of Object.values(sidFlagsMap)) {
+        labels.forEach(label => allLabels.add(label));
+    }
+    
+    // Render filter options
+    allLabels.forEach(label => {
+        const optionEl = document.createElement('div');
+        optionEl.className = 'filter-option';
+        optionEl.textContent = label;
+        optionEl.dataset.label = label;
+        
+        optionEl.addEventListener('click', () => {
+            toggleFilter(label, optionEl, filterTags);
+        });
+        
+        filterOptions.appendChild(optionEl);
+    });
+    
+    // Show/hide filter options on input focus
+    filterInput.addEventListener('focus', () => {
+        filterOptions.classList.add('visible');
+    });
+    
+    // Close filter options when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!filterInput.contains(e.target) && !filterOptions.contains(e.target)) {
+            filterOptions.classList.remove('visible');
+        }
+    });
+}
+
+function toggleFilter(label, optionEl, filterTagsContainer) {
+    if (selectedFilters.has(label)) {
+        selectedFilters.delete(label);
+        optionEl.classList.remove('selected');
+    } else {
+        selectedFilters.add(label);
+        optionEl.classList.add('selected');
+    }
+    
+    updateFilterTags(filterTagsContainer);
+    filterAndDisplayTable();
+}
+
+function updateFilterTags(container) {
+    container.innerHTML = '';
+    
+    selectedFilters.forEach(label => {
+        const tag = document.createElement('div');
+        tag.className = 'filter-tag';
+        
+        const tagText = document.createElement('span');
+        tagText.textContent = label;
+        
+        const removeBtn = document.createElement('span');
+        removeBtn.className = 'filter-tag-remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => {
+            selectedFilters.delete(label);
+            // Update the option UI
+            const optionEl = document.querySelector(`[data-label="${label}"]`);
+            if (optionEl) optionEl.classList.remove('selected');
+            updateFilterTags(container);
+            filterAndDisplayTable();
+        });
+        
+        tag.appendChild(tagText);
+        tag.appendChild(removeBtn);
+        container.appendChild(tag);
+    });
+}
+
+function filterAndDisplayTable() {
+    const tableBody = document.getElementById('tableBody');
+    const rows = Array.from(tableBody.querySelectorAll('tr'));
+    
+    rows.forEach(row => {
+        if (selectedFilters.size === 0) {
+            // No filters selected, show all
+            row.style.display = '';
+        } else {
+            // Check if this row has any of the selected filters
+            const flagsCell = row.querySelector('.sus-flags');
+            const hasSelectedFlag = Array.from(flagsCell.querySelectorAll('.flag-badge')).some(badge => {
+                const badgeText = badge.textContent.trim().replace('⚠ ', '');
+                return selectedFilters.has(badgeText);
+            });
+            
+            row.style.display = hasSelectedFlag ? '' : 'none';
+        }
+    });
+    
+    updateCounter();
+}
+
+function updateCounter() {
+    const tableBody = document.getElementById('tableBody');
+    const counterMsg = document.getElementById('counterMsg');
+    
+    const totalRows = tableBody.querySelectorAll('tr').length;
+    const visibleRows = Array.from(tableBody.querySelectorAll('tr')).filter(row => row.style.display !== 'none').length;
+    
+    if (totalRows === 0) {
+        counterMsg.textContent = '';
+    } else {
+        counterMsg.textContent = `${visibleRows} секции показани от общо ${totalRows} съмнителни`;
+    }
+}
+

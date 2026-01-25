@@ -8,19 +8,33 @@
 
 <body>
     <div class="container">
-        <h1>Подозрителни секции (SUS)</h1>
+        <h1>Подозрителни секции</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="susFilterInput">Филтрирай по причина:</label>
+                <div class="filter-container">
+                    <input type="text" id="susFilterInput" class="filter-input" placeholder="Избери флаг">
+                    <div class="filter-options" id="filterOptions"></div>
+                    <div class="filter-tags" id="filterTags"></div>
+                </div>
+            </div>
+        </div>
         
         <div id="loadingMsg" class="loading-msg" style="display: none;">Зарежда се...</div>
+        
+        <div id="counterMsg" class="counter-msg"></div>
         
         <div id="tableContainer">
             <table id="susTable">
                 <thead>
                     <tr>
+                        <th>#</th>
                         <th>SID</th>
                         <th>Община</th>
                         <th>Населено място</th>
                         <th>Адрес</th>
-                        <th>SUS флагове</th>
+                        <th>Причина за включване</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">
