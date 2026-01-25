@@ -1,4 +1,4 @@
-import { getSidDetails } from './api_utils.js'
+import { getSidsData } from './api_utils.js'
 
 const defaultParties = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Пеев;ДПС-Доган';
 
@@ -120,17 +120,26 @@ async function populateTable() {
     tableBody.innerHTML = '';
     
     try {
+        const response = await getSidsData(allSusSids);
+        
+        if (!response || !response.data) {
+            console.error('Failed to fetch SID data');
+            return;
+        }
+        
+        const sidDataMap = response.data;
         let rowNumber = 1;
+        
         for (const sid of allSusSids) {
             try {
-                const sidDetails = await getSidDetails('2024-10-27ns', sid);
+                const sidData = sidDataMap[sid];
                 
-                if (!sidDetails) continue;
+                if (!sidData) continue;
                 
-                const place = sidDetails.place[sid] || 'н.д.';
-                const ekatte = sidDetails.ekatte[sid];
-                const municipality = sidDetails.municipality_name[sid] || 'н.д.';
-                const address = sidDetails.address[sid] || 'н.д.';
+                const place = sidData.place || 'н.д.';
+                const ekatte = sidData.ekatte;
+                const municipality = sidData.municipality_name || 'н.д.';
+                const address = sidData.address || 'н.д.';
                 const flags = sidFlagsMap[sid] || [];
                 
                 // Create table row

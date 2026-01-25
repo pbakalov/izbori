@@ -1,5 +1,5 @@
 const ApiBaseUrl = 'https://bg-izbori.herokuapp.com/api/';
-// const ApiBaseUrl = 'http://127.0.0.1:8050/api/'; // API endpoint for local dev 
+// const ApiBaseUrl = 'http://127.0.0.1:8050/api/'; // for local dev 
 
 export async function getSidsByDate(ekatte) {
     const url=`${ApiBaseUrl}/sids?ekatte=${ekatte}`;
@@ -36,11 +36,12 @@ export async function getDeltas(party, el) {
     return data;
 }
 
-export async function getSidDetails(el, sid) {
-    const url=`${ApiBaseUrl}/single_election_data?el=${el}&sid=${sid}`;
+export async function getSidsData(sids) {
+    const sidList = Array.isArray(sids) ? sids.join(';') : sids;
+    const url=`${ApiBaseUrl}/sid_data?sid=${sidList}`;
 
-    const data = await fetchData(url);
-    return data;
+    const response = await fetchData(url);
+    return response;
 }
 
 async function fetchData(url) {
