@@ -50,7 +50,7 @@ async function initPage() {
 
 async function loadPlaceData() {
     try {
-        const response = await fetch('assets/data/geo/place_data.csv');
+        const response = await fetch('../assets/data/geo/place_data.csv');
         const csvText = await response.text();
         const rows = csvText.split("\n").map(row => row.trim());
         rows.shift(); // remove headers
@@ -156,7 +156,7 @@ async function populateTable() {
                 const sidCell = document.createElement('td');
                 sidCell.className = 'sid-cell';
                 const sidLink = document.createElement('a');
-                sidLink.href = `hist.html?sid=${sid}&party=${encodeURIComponent(defaultParties)}`;
+                sidLink.href = `../hist.html?sid=${sid}&party=${encodeURIComponent(defaultParties)}`;
                 sidLink.textContent = sid;
                 sidLink.target = '_blank';
                 sidCell.appendChild(sidLink);
@@ -170,7 +170,7 @@ async function populateTable() {
                 // Place cell (clickable)
                 const placeCell = document.createElement('td');
                 const placeLink = document.createElement('a');
-                placeLink.href = `hist.html?ekatte=${ekatte}&party=${encodeURIComponent(defaultParties)}`;
+                placeLink.href = `../hist.html?ekatte=${ekatte}&party=${encodeURIComponent(defaultParties)}`;
                 placeLink.textContent = place;
                 placeLink.target = '_blank';
                 placeLink.className = 'place-link';
