@@ -231,6 +231,14 @@ td {
     background-color: #e74c3c; /* Red */
 }
 
+.flag-badge.акф_2021 {
+    background-color: #c0392b; /* Dark Red */
+}
+
+.flag-badge.акф_стари {
+    background-color: #d35400; /* Dark Orange */
+}
+
 .flag-badge.кс_топ50 {
     background-color: #3498db; /* Blue */
 }

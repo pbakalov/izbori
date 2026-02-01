@@ -4,9 +4,17 @@ const defaultParties = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Пеев;ДПС-�
 
 // Load SUS data files - maps source key to URL and label
 const susDataSources = {
-    'АКФ': {
-        url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/acf_sids.csv',
-        label: 'АКФ'
+    // 'АКФ': {
+    //     url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/acf_sids.csv',
+    //     label: 'АКФ'
+    // },
+    'АКФ 2021': {
+        url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/acf_sids_0721.csv',
+        label: 'АКФ_2021'
+    },
+    'АКФ стари': {
+        url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/acf_sids_LT.csv',
+        label: 'АКФ_стари'
     },
     'КС': {
         url: 'https://raw.githubusercontent.com/pbakalov/skriptove_za_izbori/refs/heads/master/data/sus/ks50.csv',
@@ -190,7 +198,7 @@ async function populateTable() {
                     flagBadge.className = 'flag-badge';
                     // Add class based on flag type (using lowercase for CSS class)
                     flagBadge.classList.add(flag.toLowerCase());
-                    flagBadge.textContent = '⚠ ' + flag;
+                    flagBadge.textContent = flag;
                     susCell.appendChild(flagBadge);
                 });
                 row.appendChild(susCell);
