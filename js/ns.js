@@ -14,6 +14,7 @@ var info = L.control();
 var legend = createLegend(mapType);
 
 let selectedColumn = null;
+let currentHighlight = null;
 
 let minDelta = 0;
 let minDeltaVotes = 0;
@@ -129,12 +130,17 @@ function onEachFeature(feature, layer) {
 
     layer.on({
         mouseover: function(e) {
+            if (currentHighlight != null) {
+                geojsonLayer.resetStyle(currentHighlight);
+            }
+            currentHighlight = e.target;
             highlightFeature(e);
             info.update(layer.feature.properties, selectedColumn);
         },
         mouseout: function(e) {
 	        geojsonLayer.resetStyle(e.target);
 	        info.update(undefined, selectedColumn);
+            currentHighlight = null;
         },
         click: function(e) {
             map.fitBounds(e.target.getBounds()); // zoom to feature
