@@ -1,5 +1,5 @@
 import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
-import { getPlaceHist, getDeltas } from './api_utils.js';
+import { getPlaceHist, getDeltas, getGroupedData, getElectionIds } from './api_utils.js';
 import { GHP_ROOT, isMobile } from './shared.js';
 
 let csvData;
@@ -22,7 +22,8 @@ let minSupport = 0;
 let minSupportVotes = 0;
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
-    loadCSV(event.target.value).then(() => populateDropdown());
+    const electionId = event.target.value;
+    loadCSV(electionId).then(() => populateDropdown());
 });
 
 document.getElementById("columnsDropdown").addEventListener("change", updateColumn);
@@ -43,23 +44,52 @@ radios.forEach(radio => {
   });
 });
 
-loadGeoJSON().then(initializeMap);
+loadGeoJSON().then(() => populateElectionDropdown()).then(initializeMap);
 
-function loadCSV(csvFilename) {
-    return new Promise((resolve, reject) => {
-        Papa.parse(csvFilename, {
-            download: true,
-            header: true,
-            dynamicTyping: true,
-            complete: (result) => {
-                csvData = result.data;
-                resolve(result);  
-            },
-            error: (error) => {
-                reject(error); 
-            }
-        });
+function loadCSV(electionId) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const apiResponse = await getGroupedData(electionId);
+           
+            // some massage to get back the papaParse structure; saves us some refactoring
+            const transformedData = transformApiResponseToArray(apiResponse);
+            
+            const result = {
+                data: transformedData,
+                errors: [],
+                meta: {}
+            };
+            
+            csvData = result.data;
+            resolve(result);
+        } catch (error) {
+            reject(error);
+        }
     });
+}
+
+function transformApiResponseToArray(apiResponse) {
+    // apiResponse format: df.to_dict(orient='split')
+    // {
+    //   "columns": ["id", "eligible_voters", "total", "party1", "party2", ...],
+    //   "index": [14, 28, 31, ...],
+    //   "data": [[14, 2316, 1131, 124, 20, ...], [28, 93, 56, 16, 7, ...], ...]
+    // }
+    // converting to: [ { id: 14, eligible_voters: 2316, total: 1131, party1: 124, ... }, ... ]
+    
+    const { columns, index, data } = apiResponse;
+    
+    const rows = data.map((rowValues, rowIndex) => {
+        const row = { id: index[rowIndex] };
+        
+        columns.forEach((columnName, columnIndex) => {
+            row[columnName] = rowValues[columnIndex];
+        });
+        
+        return row;
+    });
+    
+    return rows 
 }
 
 function loadGeoJSON() {
@@ -74,6 +104,35 @@ function loadGeoJSON() {
         reject(error);
       });
   });
+}
+
+function populateElectionDropdown() {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const electionData = await getElectionIds();
+            const dropdown = document.getElementById('csvDropdown');
+            
+            dropdown.innerHTML = '';
+            
+            // options from API
+            for (const [electionId, label] of Object.entries(electionData)) {
+                const option = document.createElement('option');
+                option.value = electionId;
+                option.textContent = label;
+                dropdown.appendChild(option);
+            }
+            
+            // default to most recent
+            const options = dropdown.querySelectorAll('option');
+            if (options.length > 0) {
+                dropdown.value = options[options.length - 1].value;
+            }
+            
+            resolve();
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 function loadMarkerData(file) {
@@ -274,12 +333,11 @@ function initializeMap() {
 function set_el_and_party(el, party) {
     const csvDropdown = document.getElementById('csvDropdown');
     const options = Array.from(csvDropdown.options).map(option => option.value);
-    const selectedCsv = `../assets/data/el_data/${el}`;
 
-    if (options.includes(selectedCsv)) {
-        csvDropdown.value=selectedCsv; //does not trigger event listeners
-        loadCSV(csvDropdown.value).then(() => populateDropdown(party));
-    } else {
+    if (el && options.includes(el)) { // el specified in url is a valid option
+        csvDropdown.value = el; //does not trigger event listeners
+        loadCSV(el).then(() => populateDropdown(party));
+    } else { // fall back to default 
         loadCSV(csvDropdown.value).then(() => populateDropdown());
     }
 }
@@ -288,8 +346,7 @@ const updateUrlWithMapState = () => {
     const center = map.getCenter();
     const zoom = map.getZoom();
 
-    const parts = document.getElementById('csvDropdown').value.split('/');
-    const el = parts[parts.length-1];
+    const el = document.getElementById('csvDropdown').value;
     const party = document.getElementById('columnsDropdown').value;
 
     let newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
@@ -303,8 +360,7 @@ const updateUrlWithMapState = () => {
 
 function populateDropdown(colOverride=null) {
   
-  const parts = document.getElementById('csvDropdown').value.split('/');
-  const el = parts[parts.length-1].split('.')[0];
+  const el = document.getElementById('csvDropdown').value;
 
   const dropdown = document.getElementById("columnsDropdown");
   const columns = Object.keys(csvData[0]);
@@ -357,8 +413,7 @@ function populateDropdown(colOverride=null) {
 
 function updateColumn(event) {
   selectedColumn = event.target.value;
-  const parts = document.getElementById('csvDropdown').value.split('/');
-  const el = parts[parts.length-1].split('.')[0];
+  const el = document.getElementById('csvDropdown').value;
   matchData(selectedColumn, el).then(() => {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);

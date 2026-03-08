@@ -36,6 +36,20 @@ export async function getDeltas(party, el) {
     return data;
 }
 
+export async function getGroupedData(el) {
+    const url=`${ApiBaseUrl}/grouped_data?el=${el}`;
+
+    const data = await fetchData(url);
+    return data;
+}
+
+export async function getElectionIds() {
+    const url=`${ApiBaseUrl}/election_ids`;
+
+    const data = await fetchData(url);
+    return data;
+}
+
 export async function getSidsData(sids) {
     const sidArray = Array.isArray(sids) ? sids : [sids];
     const batchSize = 400;
