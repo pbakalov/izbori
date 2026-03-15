@@ -1,4 +1,4 @@
-import { getSidsByDate, getSidResults, getSidHist, getPlaceHist } from './api_utils.js'
+import { getSidsByDate, getSidResults, getSidHist, getPlaceHist, getParties } from './api_utils.js'
 import { CSVCombobox, isMobile } from './shared.js'
 
 function initializeMobileMenu() {
@@ -351,13 +351,12 @@ const el = urlParams.get('el');
 const sid = urlParams.get('sid');
 const party = urlParams.get('party');
 
-const partyCombobox = new CSVCombobox(`assets/data/parties.csv`, { // TODO get party list from API
+const parties = await getParties();
+const partyCombobox = new CSVCombobox(parties, {
     inputId: 'partyCombobox',
     listId: 'partyOptionsList',
     hiddenValueId: 'partySelectedValue',
     tagsContainerId: 'partySelectedTags',
-    valueColumnIndex: 0, 
-    labelColumnIndex: 1, 
     multiSelect: true
 });
 await partyCombobox.init(); // some overhead, as it's called in the constructor
