@@ -329,7 +329,6 @@ const metadataKeys = [
 ];
 
 const renameMap = {
-    'invalid' : 'Невалидни',
     'eligible_voters' : 'По списък',
     'n_stations' : 'Секции',
     'invalid' : 'Невалидни',

@@ -53,8 +53,7 @@ export class CSVCombobox {
     }
 
     transformPartiesArray(parties) {
-        // Transform array of party strings to 2D format: [[value, label], ...]
-        // where first element is value and second is label (display name)
+        // TODO have the API /parties return name : label pairs?
         const displayNameMap = {
             'npn': 'не подкрепям никого',
             'invalid': 'невалидни'

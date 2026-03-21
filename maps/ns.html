@@ -20,7 +20,15 @@
             <div class="menu-content">
             <select id="csvDropdown"></select>
             <br>
-            <select id="columnsDropdown"></select><br>
+            <div id='partySelection' class="combobox-wrapper">
+                <div>
+                    <input type="text" id="partyCombobox" class="combobox-input" placeholder="избери партии">
+                    <div class="multi-select-tags" id="partySelectedTags"></div>
+                </div>
+                <div id="partyOptionsList" class="options-list"></div>
+                <input type="hidden" id="partySelectedValue">
+            </div>
+            <br>
             <label>
             <b>Оцвети според:</b>
             <form>
