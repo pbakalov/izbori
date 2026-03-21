@@ -1,9 +1,7 @@
 export const GHP_ROOT = "https://pbakalov.github.io";
 
 export class CSVCombobox {
-    constructor(csvFilePath, {
-        labelColumnIndex = 1,
-        valueColumnIndex = 0,
+    constructor(parties, {
         inputId,
         listId,
         hiddenValueId,
@@ -21,10 +19,8 @@ export class CSVCombobox {
         
         // Configuration
         this.delimiter = delimiter;
-        this.labelColumnIndex = labelColumnIndex;
-        this.valueColumnIndex = valueColumnIndex;
         this.multiSelect = multiSelect;
-        this.csvFilePath = csvFilePath;
+        this.parties = parties;
         
         // State
         this.selectedValues = new Set();
@@ -40,8 +36,8 @@ export class CSVCombobox {
         this.optionsList.classList.add('loading');
 
         try {
-            // Fetch and parse CSV
-            await this.parseCSV(this.csvFilePath);
+            // Transform parties array to 2D format for internal use
+            this.transformPartiesArray(this.parties);
             
             // Setup event listeners and render options
             this.setupEventListeners();
@@ -56,23 +52,25 @@ export class CSVCombobox {
         }
     }
 
-    async parseCSV(csvFilePath) {
-        const response = await fetch(csvFilePath);
-        const csvString = await response.text();
-        const rows = csvString.split("\n").map(row => row.trim());
-        rows.shift();
+    transformPartiesArray(parties) {
+        // TODO have the API /parties return name : label pairs?
+        const displayNameMap = {
+            'npn': 'не подкрепям никого',
+            'invalid': 'невалидни'
+        };
         
-        // Split CSV into rows and parse each row
-        this.allOptions = rows.map(row => row.split(this.delimiter).map(cell => cell.trim()))
-            // Filter out empty rows
-            .filter(row => row.length > Math.max(this.labelColumnIndex, this.valueColumnIndex));
+        this.allOptions = parties.map(party => {
+            const value = party;
+            const label = displayNameMap[party] || party;
+            return [value, label];
+        });
     }
 
     renderOptions() {
         this.optionsList.innerHTML = '';
         this.allOptions.forEach(row => {
-            const label = row[this.labelColumnIndex];
-            const value = row[this.valueColumnIndex];
+            const value = row[0];
+            const label = row[1];
             
             const optionElement = document.createElement('div');
             optionElement.textContent = label;
@@ -103,13 +101,13 @@ export class CSVCombobox {
 
     filterOptions(searchTerm) {
         const filteredOptions = this.allOptions.filter(row => 
-            row[this.labelColumnIndex].toLowerCase().includes(searchTerm.toLowerCase())
+            row[1].toLowerCase().includes(searchTerm.toLowerCase())
         );
         
         this.optionsList.innerHTML = '';
         filteredOptions.forEach(row => {
-            const label = row[this.labelColumnIndex];
-            const value = row[this.valueColumnIndex];
+            const value = row[0];
+            const label = row[1];
             
             const optionElement = document.createElement('div');
             optionElement.textContent = label;
@@ -169,10 +167,10 @@ export class CSVCombobox {
         // Create tags for each selected option
         this.selectedValues.forEach(value => {
             // Find the full row for this value
-            const row = this.allOptions.find(r => r[this.valueColumnIndex] === value);
+            const row = this.allOptions.find(r => r[0] === value);
             if (!row) return;
 
-            const label = row[this.labelColumnIndex];
+            const label = row[1];
             
             // Create tag element
             const tagElement = document.createElement('div');

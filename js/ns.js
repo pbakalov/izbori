@@ -1,6 +1,6 @@
 import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
-import { getPlaceHist, getDeltas, getGroupedData, getElectionIds } from './api_utils.js';
-import { GHP_ROOT, isMobile } from './shared.js';
+import { getPlaceHist, getDeltas, getGroupedData, getElectionIds, getParties } from './api_utils.js';
+import { GHP_ROOT, isMobile, CSVCombobox } from './shared.js';
 
 let csvData;
 let geojsonData;
@@ -13,8 +13,9 @@ let geojsonLayer;
 var info = L.control();
 var legend = createLegend(mapType);
 
-let selectedColumn = null;
+let selectedParties = 'ГЕРБ-СДС;ГЕРБ'
 let currentHighlight = null;
+let partyCombobox = null;
 
 let minDelta = 0;
 let minDeltaVotes = 0;
@@ -23,10 +24,9 @@ let minSupportVotes = 0;
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     const electionId = event.target.value;
-    loadCSV(electionId).then(() => populateDropdown());
+    loadCSV(electionId).then(() => updateElection());
 });
 
-document.getElementById("columnsDropdown").addEventListener("change", updateColumn);
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
 document.getElementById('hideInfo').addEventListener('click', closeInfoBox);
 document.getElementById('minDelta').addEventListener('change', updateMinDelta);
@@ -44,12 +44,30 @@ radios.forEach(radio => {
   });
 });
 
-loadGeoJSON().then(() => populateElectionDropdown()).then(initializeMap);
+async function initializeCombobox() {
+  const parties = await getParties();
+  partyCombobox = new CSVCombobox(parties, {
+      inputId: 'partyCombobox',
+      listId: 'partyOptionsList',
+      hiddenValueId: 'partySelectedValue',
+      tagsContainerId: 'partySelectedTags',
+      multiSelect: true
+  });
+  await partyCombobox.init();
+
+  if (selectedParties) {
+    partyCombobox.setOptions(selectedParties.split(';'));
+  }
+
+  document.getElementById('partySelectedValue').addEventListener('change', updatePartySelection);
+}
+
+loadGeoJSON().then(() => populateElectionDropdown()).then(initializeCombobox).then(initializeMap);
 
 function loadCSV(electionId) {
     return new Promise(async (resolve, reject) => {
         try {
-            const apiResponse = await getGroupedData(electionId);
+            const apiResponse = await getGroupedData(electionId, selectedParties);
            
             // some massage to get back the papaParse structure; saves us some refactoring
             const transformedData = transformApiResponseToArray(apiResponse);
@@ -146,21 +164,22 @@ function loadMarkerData(file) {
     .catch(error => console.error('Error fetching marker data:', error));
 }
 
-async function matchData(columnName, el) { 
-  const deltas = await getDeltas(columnName, el);
+async function matchData(parties, el) { 
+  const deltas = await getDeltas(parties, el);
   geojsonData.features.forEach((feature) => {
 
     const match = csvData.find((row) => ('00000' + row.id).slice(-5) === feature.properties.ncode); 
     if (match) {
-      feature.properties['value'] = match[columnName];
       feature.properties['delta'] = deltas['delta'][feature.properties.ncode.replace(/^0+/, '')];
       feature.properties['delta_votes'] = deltas['delta_votes'][feature.properties.ncode.replace(/^0+/, '')];
       feature.properties['el_ref'] = deltas['meta']['el_ref'];
       feature.properties['el'] = deltas['meta']['el'];
-      if (columnName !=='total') {
-        feature.properties['value_prop'] = match[columnName]/match['total'];
+      if (parties !=='total') {
+        feature.properties['value_prop'] = match['partyGroup']/match['total'];
+        feature.properties['value'] = match['partyGroup'];
       } else {
-        feature.properties['value_prop'] = match[columnName]/match['eligible_voters'];
+        feature.properties['value_prop'] = match['total']/match['eligible_voters'];
+        feature.properties['value'] = match['total'];
       };
       feature.properties['total'] = match['total']; 
       feature.properties['eligible_voters'] = match['eligible_voters']; 
@@ -194,17 +213,17 @@ function onEachFeature(feature, layer) {
             }
             currentHighlight = e.target;
             highlightFeature(e);
-            info.update(layer.feature.properties, selectedColumn);
+            info.update(layer.feature.properties, selectedParties);
         },
         mouseout: function(e) {
 	        geojsonLayer.resetStyle(e.target);
-	        info.update(undefined, selectedColumn);
+	        info.update(undefined, selectedParties);
             currentHighlight = null;
         },
         click: function(e) {
             map.fitBounds(e.target.getBounds()); // zoom to feature
             if (!isMobile()) {
-                getTsData(selectedColumn, feature.properties.ncode).then(
+                getTsData(selectedParties, feature.properties.ncode).then(
                     tsData => {
                     const popupContent = JsonToTable(tsData); // TODO show figure instead of table
                     const sids = `<br><a href="../hist.html?ekatte=${feature.properties.ncode}">виж секции</a>`;
@@ -218,7 +237,7 @@ function onEachFeature(feature, layer) {
                 });
             } else {
                 highlightFeature(e);
-                info.update(layer.feature.properties, selectedColumn);
+                info.update(layer.feature.properties, selectedParties);
             }
         },
 	});
@@ -244,8 +263,8 @@ function initializeMap() {
   	return this._div;
   };
 
-  info.update = function (props, selectedColumn) {
-  	var textbox = generateTextbox(props, selectedColumn);
+  info.update = function (props, parties) {
+  	var textbox = generateTextbox(props, parties);
 
     this._div.innerHTML = '';
     var closeButton;
@@ -266,7 +285,7 @@ function initializeMap() {
   };
 
   info.close = function() { // why does this close the popup in addition to the infobox?
-      info.update(undefined, selectedColumn);
+      info.update(undefined, parties);
       // TODO reset the style of the clicked feature 
   };
 
@@ -336,9 +355,15 @@ function set_el_and_party(el, party) {
 
     if (el && options.includes(el)) { // el specified in url is a valid option
         csvDropdown.value = el; //does not trigger event listeners
-        loadCSV(el).then(() => populateDropdown(party));
+        if (party) {
+            selectedParties = party;
+            partyCombobox.setOptions(party.split(';'));
+        }
+        loadCSV(el).then(() => {
+            updateElection();
+        });
     } else { // fall back to default 
-        loadCSV(csvDropdown.value).then(() => populateDropdown());
+        loadCSV(csvDropdown.value).then(() => updateElection());
     }
 }
 
@@ -347,7 +372,7 @@ const updateUrlWithMapState = () => {
     const zoom = map.getZoom();
 
     const el = document.getElementById('csvDropdown').value;
-    const party = document.getElementById('columnsDropdown').value;
+    const party = selectedParties;
 
     let newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
     newUrl += `&minDelta=${minDelta}`;
@@ -358,70 +383,37 @@ const updateUrlWithMapState = () => {
     window.history.replaceState(null, '', newUrl);
 };
 
-function populateDropdown(colOverride=null) {
+function updateElection() {
   
   const el = document.getElementById('csvDropdown').value;
 
-  const dropdown = document.getElementById("columnsDropdown");
-  const columns = Object.keys(csvData[0]);
-  let parties = [];
-  const excluded = [
-    'id', 'eligible_voters', 
-    'total_valid', 
-    'activity',
-    'nuts4', 'municipality_name', 'region', 'region_name', 'n_stations'
-  ];
-
-  dropdown.innerHTML = ''; 
-
-  columns.forEach((column) => {
-    
-    if (! excluded.includes(column)) { 
-      const option = document.createElement("option");
-      option.value = column;
-      if (column ==='total') {
-        option.textContent = 'активност';
-      } else {
-        option.textContent = column;
-      }
-      dropdown.appendChild(option);
-      parties.push(column)
-    }
-  });
-
-  if ((selectedColumn == null) || !( columns.includes(selectedColumn))) { 
-    selectedColumn = parties[0]; 
-  } else if (columns.includes(selectedColumn)) {
-    dropdown.value = selectedColumn;
-  };
-
-  if (columns.includes(colOverride)) {
-    dropdown.value = colOverride;
-    selectedColumn = colOverride;
-  };
-
-  matchData(selectedColumn, el).then(() => {
+  matchData(selectedParties, el).then(() => {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
     applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
   })
 
-  info.update(undefined, selectedColumn);
+  info.update(undefined, selectedParties);
   updateUrlWithMapState();
 }
 
-function updateColumn(event) {
-  selectedColumn = event.target.value;
+function updatePartySelection(event) {
+  selectedParties = this.value;
+  if (selectedParties === "") {
+    selectedParties = 'total'; // TODO might need some extra work
+  }
   const el = document.getElementById('csvDropdown').value;
-  matchData(selectedColumn, el).then(() => {
-    geojsonLayer.setStyle(feature => {
-      return getFeatureColor(feature, mapType);
-    });
-    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
-  })
-  info.update(undefined, selectedColumn);
-  updateUrlWithMapState();
+  loadCSV(el).then(() => {
+    matchData(selectedParties, el).then(() => {
+      geojsonLayer.setStyle(feature => {
+        return getFeatureColor(feature, mapType);
+      });
+      applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes)
+    })
+    info.update(undefined, selectedParties);
+    updateUrlWithMapState();
+  });
 }
 
 function updateMapType(event) {
@@ -441,12 +433,12 @@ function updateMapType(event) {
     updateUrlWithMapState();
 }
 
-function generateTextbox(props, selectedColumn) {
+function generateTextbox(props, parties) {
 
     var selectedYear = document.getElementById('csvDropdown');
     var selectedYearText = selectedYear.options[selectedYear.selectedIndex].textContent;;
-    if (selectedColumn!=='total') {
-        var textbox = '<h4>Резултати ' + selectedColumn + ' (' + selectedYearText + ')</h4>';
+    if (parties!=='total') {
+        var textbox = '<h4>Резултати (' + selectedYearText + ')</h4>';
     } else {
         var textbox = '<h4>Активност (' + selectedYearText + ')</h4>';
     }
@@ -458,8 +450,8 @@ function generateTextbox(props, selectedColumn) {
 
         textbox += `<b>${props.name}, общ. ${props.obsht_name} (${props.ncode})</b><br>`;
 
-        if (selectedColumn !== 'total') {
-            textbox += `${selectedColumn} <br>гласове: ${props['value']} (`
+        if (parties !== 'total') {
+            textbox += `${parties} <br>гласове: ${props['value']} (`
             textbox += `${isNaN(props['value']) ? 'н.д.' : (100*props['value']/props['total']).toFixed(1)}%)<br>`
             // TODO: add previous and last total 
         } else {
@@ -503,6 +495,7 @@ function generateTableHtmlForRowById(targetId) {
     html += '</tr></thead>';
 
     html += '<tbody><tr>';
+    const selectedPartiesArray = selectedParties.split(';');
     for (let key in targetRow) {
         if (![
                 "total",
@@ -514,15 +507,19 @@ function generateTableHtmlForRowById(targetId) {
                 'region_name',
                 'nuts4',
                 'municipality_name',
-                'n_stations'
+                'n_stations',
+                'partyGroup',
             ].includes(key)) {
             const nVotes = targetRow[key];
             const proportion = nVotes / targetRow.total;
+            const isSelected = selectedPartiesArray.includes(key);
+            const boldTag = isSelected ? '<b>' : '';
+            const boldTagClose = isSelected ? '</b>' : '';
 
             html += `<tr>`;
-            html += `<td>${key}</td>`;
-            html += `<td>${nVotes}</td>`;
-            html += `<td>${isNaN(proportion) ? 'н.д.' : proportion.toFixed(2)}</td>`;
+            html += `<td>${boldTag}${key}${boldTagClose}</td>`;
+            html += `<td>${boldTag}${nVotes}${boldTagClose}</td>`;
+            html += `<td>${boldTag}${isNaN(proportion) ? 'н.д.' : proportion.toFixed(2)}${boldTagClose}</td>`;
             html += `</tr>`;
         }
     }
