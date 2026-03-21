@@ -170,15 +170,16 @@ async function matchData(parties, el) {
 
     const match = csvData.find((row) => ('00000' + row.id).slice(-5) === feature.properties.ncode); 
     if (match) {
-      feature.properties['value'] = match['partyGroup'];
       feature.properties['delta'] = deltas['delta'][feature.properties.ncode.replace(/^0+/, '')];
       feature.properties['delta_votes'] = deltas['delta_votes'][feature.properties.ncode.replace(/^0+/, '')];
       feature.properties['el_ref'] = deltas['meta']['el_ref'];
       feature.properties['el'] = deltas['meta']['el'];
       if (parties !=='total') {
         feature.properties['value_prop'] = match['partyGroup']/match['total'];
+        feature.properties['value'] = match['partyGroup'];
       } else {
         feature.properties['value_prop'] = match['total']/match['eligible_voters'];
+        feature.properties['value'] = match['total'];
       };
       feature.properties['total'] = match['total']; 
       feature.properties['eligible_voters'] = match['eligible_voters']; 
