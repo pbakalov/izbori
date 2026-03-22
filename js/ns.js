@@ -284,8 +284,8 @@ function initializeMap() {
     };
   };
 
-  info.close = function() { // why does this close the popup in addition to the infobox?
-      info.update(undefined, parties);
+  info.close = function() {
+      info.update(undefined, selectedParties);
       // TODO reset the style of the clicked feature 
   };
 
