@@ -226,9 +226,11 @@ function onEachFeature(feature, layer) {
                 getTsData(selectedParties, feature.properties.ncode).then(
                     tsData => {
                     const popupContent = JsonToTable(tsData); // TODO show figure instead of table
-                    const sids = `<br><a href="../hist.html?ekatte=${feature.properties.ncode}">виж секции</a>`;
+                    const cleanEkatte = feature.properties.ncode.replace(/^0+/, '');
+                    const sids = `<br><a href="../hist.html?ekatte=${cleanEkatte}">виж секции</a>`;
+                    const placeHist = `|<a href="../hist.html?ekatte=${cleanEkatte}&party=${selectedParties}">виж история</a>`;
                     layer.setPopupContent(
-                        `${defaultPopup}${popupContent}${sids}`
+                        `${defaultPopup}${popupContent}${sids}${placeHist}`
                     );
                 })
                 .catch(error => {
@@ -435,12 +437,15 @@ function updateMapType(event) {
 
 function generateTextbox(props, parties) {
 
+    var textbox = '';
     var selectedYear = document.getElementById('csvDropdown');
     var selectedYearText = selectedYear.options[selectedYear.selectedIndex].textContent;;
+
+    
     if (parties!=='total') {
-        var textbox = '<h4>Резултати (' + selectedYearText + ')</h4>';
+        textbox += '<h4>Резултати (' + selectedYearText + ')</h4>';
     } else {
-        var textbox = '<h4>Активност (' + selectedYearText + ')</h4>';
+        textbox += '<h4>Активност (' + selectedYearText + ')</h4>';
     }
 
     if (props) {
