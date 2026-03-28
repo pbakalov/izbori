@@ -470,14 +470,15 @@ function generateTextbox(props, parties) {
         textbox += `<b>Промяна</b> спрямо ${props['el_ref']}:<br>`
         textbox += `${isNaN(props['delta']) ? 'н.д.' : (100*props['delta']).toFixed(1)}% `
         textbox += `(${isNaN(props['delta_votes']) ? 'н.д.' : props['delta_votes']} гласа)<br>`
+        if (isMobile()) {
+            const cleanEkatte = props.ncode.replace(/^0+/, '');
+            textbox += `<a href="../hist.html?ekatte=${cleanEkatte}&party=${selectedParties}" target="_blank">виж история</a>`;
+        }
         textbox += table + '<br>'
         textbox += 'Общо гласували (вкл. невалидни): ' +  props['total']  + '<br>'
         textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
         textbox += `Гласували/избиратели по списък: ${isNaN(props['total']) ? 'н.д.' : (props['total']/props['eligible_voters']).toFixed(2)}<br>`
         textbox += `Брой секции: ${targetRow ? targetRow['n_stations'] : 0}<br>`
-        // if (isMobile()) {
-        // add button to show election history OR add it here directly
-        //}
     } else {
         textbox += 'Посочете населено место.'
     };
