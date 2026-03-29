@@ -1,5 +1,18 @@
 export const GHP_ROOT = "https://pbakalov.github.io";
 
+export const renameMap = {
+    'eligible_voters' : 'По списък',
+    'n_stations' : 'Секции',
+    'invalid' : 'Невалидни',
+    'total' : 'Общо гласували',
+    'npn' : 'Не подкрепям никого',
+    'place' : 'Населено място',
+    'address' : 'Адрес',
+    'ekatte' : 'ЕКАТТЕ',
+    'municipality_name' : 'Община',
+    'region_name' : 'Избирателен район',
+}
+
 export class CSVCombobox {
     constructor(parties, {
         inputId,
@@ -54,14 +67,9 @@ export class CSVCombobox {
 
     transformPartiesArray(parties) {
         // TODO have the API /parties return name : label pairs?
-        const displayNameMap = {
-            'npn': 'не подкрепям никого',
-            'invalid': 'невалидни'
-        };
-        
         this.allOptions = parties.map(party => {
             const value = party;
-            const label = displayNameMap[party] || party;
+            const label = renameMap[party] || party;
             return [value, label];
         });
     }

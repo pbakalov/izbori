@@ -1,6 +1,6 @@
 import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
 import { getPlaceHist, getDeltas, getGroupedData, getElectionIds, getParties } from './api_utils.js';
-import { GHP_ROOT, isMobile, CSVCombobox } from './shared.js';
+import { GHP_ROOT, isMobile, CSVCombobox, renameMap} from './shared.js';
 
 let csvData;
 let geojsonData;
@@ -223,7 +223,7 @@ function onEachFeature(feature, layer) {
         click: function(e) {
             map.fitBounds(e.target.getBounds()); // zoom to feature
             if (!isMobile()) {
-                getTsData(selectedParties, feature.properties.ncode).then(
+                getPlaceHist(feature.properties.ncode, selectedParties).then(
                     tsData => {
                     const popupContent = JsonToTable(tsData); // TODO show figure instead of table
                     const cleanEkatte = feature.properties.ncode.replace(/^0+/, '');
@@ -516,6 +516,7 @@ function generateTableHtmlForRowById(targetId) {
                 'n_stations',
                 'partyGroup',
             ].includes(key)) {
+            const partyName = renameMap[key] || key; // invalid, npn
             const nVotes = targetRow[key];
             const proportion = nVotes / targetRow.total;
             const isSelected = selectedPartiesArray.includes(key);
@@ -523,7 +524,7 @@ function generateTableHtmlForRowById(targetId) {
             const boldTagClose = isSelected ? '</b>' : '';
 
             html += `<tr>`;
-            html += `<td>${boldTag}${key}${boldTagClose}</td>`;
+            html += `<td>${boldTag}${partyName}${boldTagClose}</td>`;
             html += `<td>${boldTag}${nVotes}${boldTagClose}</td>`;
             html += `<td>${boldTag}${isNaN(proportion) ? 'н.д.' : proportion.toFixed(2)}${boldTagClose}</td>`;
             html += `</tr>`;
@@ -541,17 +542,6 @@ function openInfoBox() {
 
 function closeInfoBox() {
     document.getElementById('infoBox').style.display = 'none';
-}
-
-async function getTsData(party, ekatte) {
-    const renameMap = {
-        'не подкрепям никого' : 'npn'
-    }
-    const p_ = renameMap[party] || party;
-
-    const tsData = await getPlaceHist(ekatte, p_);
-
-    return tsData;
 }
 
 function updatePins (event) {
@@ -662,7 +652,6 @@ function updateMinSupportVotes(event) {
 }
 
 function applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes) {
-
     let selectedEkatte = [];
 
     if ((minDelta>0) || (minDeltaVotes>0) || (minSupport>0) || (minSupportVotes>0)) {
