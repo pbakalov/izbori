@@ -1,5 +1,5 @@
 import { getSidsByDate, getSidResults, getSidHist, getPlaceHist, getParties } from './api_utils.js'
-import { CSVCombobox, isMobile } from './shared.js'
+import { CSVCombobox, isMobile, renameMap } from './shared.js'
 
 function initializeMobileMenu() {
     if (!isMobile()) return;
@@ -327,19 +327,6 @@ const metadataKeys = [
     "place", "address", "admin_reg", "ekatte", "eligible_voters",
     "municipality", "municipality_name", "station", "region", "region_name"
 ];
-
-const renameMap = {
-    'eligible_voters' : 'По списък',
-    'n_stations' : 'Секции',
-    'invalid' : 'Невалидни',
-    'total' : 'Общо гласували',
-    'npn' : 'Не подкрепям никого',
-    'place' : 'Населено място',
-    'address' : 'Адрес',
-    'ekatte' : 'ЕКАТТЕ',
-    'municipality_name' : 'Община',
-    'region_name' : 'Избирателен район',
-}
 
 const loadingMsg = 'Зарежда се ...';
 const defaultParties = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Пеев;ДПС-Доган';

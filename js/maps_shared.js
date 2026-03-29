@@ -1,3 +1,5 @@
+import { renameMap } from './shared.js'
+
 export function getColor(d, mapType) {
     if (mapType === 'result') {
 	    return d > .8 ? '#800026' :
@@ -114,15 +116,7 @@ export function getFeatureColor(feature, mapType='result') {
 }
 
 export function JsonToTable(data) {
-    const skip = ['place', 'region_name', 'invalid', 'municipality_name'];
-    const renameMap = { // TODO move to shared
-        'invalid' : 'Невалидни',
-        'eligible_voters' : 'По списък',
-        'n_stations' : 'Секции',
-        'invalid' : 'Невалидни',
-        'total' : 'Общо гласували',
-        'npn' : 'Не подкрепям никого',
-    }
+    const skip = ['place', 'region_name', 'municipality_name'];
 
     let thead = '<table><thead><tr><th>Дата</th>';
     for (let key in data) {
