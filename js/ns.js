@@ -439,8 +439,11 @@ function generateTextbox(props, parties) {
 
     var textbox = '';
     var selectedYear = document.getElementById('csvDropdown');
-    var selectedYearText = selectedYear.options[selectedYear.selectedIndex].textContent;;
+    var selectedYearText = selectedYear.options[selectedYear.selectedIndex].textContent;
 
+    if (parties) {
+        parties = parties.split(';').map(party => renameMap[party] || party).join(';');
+    }
     
     if (parties!=='total') {
         textbox += '<h4>Резултати (' + selectedYearText + ')</h4>';
