@@ -3,6 +3,27 @@
 
 const pdf_base = "https://pbakalov.github.io/assets/dela_kupen_vot/";
 
+// Sortable columns mapping
+const sortableColumns = {
+    'crime_date': 'Дата на престъплението',
+    'judgment_date': 'Дата на съдебното решение',
+    'court': 'Съд',
+    'verdict': 'Присъда',
+    'verdict_type': 'Вид акт',
+    'election': 'Вид избор',
+    'beneficiary': 'В полза на',
+    'location': 'Място'
+};
+
+// Current sort state
+let currentSort = {
+    column: null,
+    direction: 'asc' // 'asc' or 'desc'
+};
+
+// Store all cases for sorting
+let allCases = [];
+
 /**
  * Fetch cases from JSON file
  */
@@ -196,6 +217,134 @@ function createTableRow(caseData) {
 }
 
 /**
+ * Get sortable value from case data
+ */
+function getSortValue(caseData, columnKey) {
+    let value;
+    
+    switch(columnKey) {
+        case 'crime_date':
+            return caseData.crime_date || '';
+        case 'judgment_date':
+            return caseData.judgment_date || '';
+        case 'court':
+            return caseData.case_number.court || '';
+        case 'verdict':
+            return caseData.verdict || '';
+        case 'verdict_type':
+            return caseData.verdict_type || '';
+        case 'election':
+            return `${caseData.election.year}-${caseData.election.type}`;
+        case 'beneficiary':
+            return caseData.beneficiary.party || '';
+        case 'location':
+            return caseData.location || '';
+        default:
+            return '';
+    }
+}
+
+/**
+ * Parse date string (DD.MM.YYYY) for sorting
+ */
+function parseDate(dateStr) {
+    if (!dateStr || dateStr === 'н.д.') return new Date(0);
+    const parts = dateStr.split('.');
+    if (parts.length !== 3) return new Date(0);
+    return new Date(parts[2], parts[1] - 1, parts[0]);
+}
+
+/**
+ * Compare values for sorting
+ */
+function compareValues(val1, val2, columnKey, direction) {
+    let a = val1;
+    let b = val2;
+    
+    // Handle date columns
+    if (columnKey === 'crime_date' || columnKey === 'judgment_date') {
+        a = parseDate(String(val1));
+        b = parseDate(String(val2));
+    } else {
+        // Convert to strings and lowercase for comparison
+        a = String(a).toLowerCase();
+        b = String(b).toLowerCase();
+    }
+    
+    if (a < b) return direction === 'asc' ? -1 : 1;
+    if (a > b) return direction === 'asc' ? 1 : -1;
+    return 0;
+}
+
+/**
+ * Sort cases by column
+ */
+function sortCases(columnKey, direction) {
+    const sorted = [...allCases].sort((a, b) => {
+        const valA = getSortValue(a, columnKey);
+        const valB = getSortValue(b, columnKey);
+        return compareValues(valA, valB, columnKey, direction);
+    });
+    return sorted;
+}
+
+/**
+ * Handle column header click for sorting
+ */
+function setupColumnSorting() {
+    const headers = document.querySelectorAll('table thead th');
+    
+    headers.forEach((header, index) => {
+        const columnLabel = header.textContent.trim().split('\n')[0]; // Get first line only
+        
+        // Check if this column is sortable
+        let columnKey = null;
+        for (const [key, label] of Object.entries(sortableColumns)) {
+            if (label === columnLabel) {
+                columnKey = key;
+                break;
+            }
+        }
+        
+        if (columnKey) {
+            header.style.cursor = 'pointer';
+            header.classList.add('sortable-header');
+            header.dataset.column = columnKey;
+            header.addEventListener('click', () => {
+                handleColumnSort(columnKey, header);
+            });
+        }
+    });
+}
+
+/**
+ * Handle sorting when header is clicked
+ */
+function handleColumnSort(columnKey, headerElement) {
+    // Determine new sort direction
+    let newDirection = 'asc';
+    if (currentSort.column === columnKey && currentSort.direction === 'asc') {
+        newDirection = 'desc';
+    }
+    
+    // Update current sort state
+    currentSort.column = columnKey;
+    currentSort.direction = newDirection;
+    
+    // Remove sort indicators from all headers
+    document.querySelectorAll('table thead th').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Add sort indicator to current header
+    headerElement.classList.add(`sort-${newDirection}`);
+    
+    // Sort and repopulate
+    const sortedCases = sortCases(columnKey, newDirection);
+    populateTable(sortedCases);
+}
+
+/**
  * Populate the table with cases
  */
 function populateTable(cases) {
@@ -204,6 +353,9 @@ function populateTable(cases) {
         console.error('Table tbody not found');
         return;
     }
+
+    // Clear existing rows
+    tbody.innerHTML = '';
 
     cases.forEach(caseData => {
         const row = createTableRow(caseData);
@@ -230,8 +382,23 @@ async function initializePage() {
         console.error('No cases loaded');
         return;
     }
-    populateTable(cases);
+    allCases = cases;
     updateCaseCount(cases.length);
+    setupColumnSorting();
+    
+    // Sort by "Вид избор" (election type) on initial load
+    const sortedCases = sortCases('election', 'asc');
+    populateTable(sortedCases);
+    
+    // Update sort indicator for initial sort
+    currentSort.column = 'election';
+    currentSort.direction = 'asc';
+    const electionHeader = Array.from(document.querySelectorAll('table thead th')).find(th => 
+        th.dataset.column === 'election'
+    );
+    if (electionHeader) {
+        electionHeader.classList.add('sort-asc');
+    }
 }
 
 // Initialize when DOM is ready

@@ -24,6 +24,28 @@ th {
     border-bottom: 2px solid #34495e;
 }
 
+th.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+th.sortable-header:hover {
+    background-color: #34495e;
+}
+
+th.sort-asc::after {
+    content: " ▲";
+    font-size: 0.75em;
+    color: #fff;
+}
+
+th.sort-desc::after {
+    content: " ▼";
+    font-size: 0.75em;
+    color: #fff;
+}
+
 td {
     padding: 12px;
     border-bottom: 1px solid #ddd;
