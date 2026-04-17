@@ -822,9 +822,8 @@
       "count": 1,
       "details": [
         {
-          "name": "редактирано",
-          "age": "редактирано",
-          "education": "средно образование",
+          "name": "Иван И. Т, с прякор Х.",
+          "education": "средно",
           "occupation": "безработен"
         }
       ]
@@ -835,10 +834,9 @@
       "description": ""
     },
     "beneficiary": {
-      "party": "н.д.",
-      "party_full": "н.д.",
-      "candidate": "н.д.",
-      "position": "н.д."
+      "party": "ДПС",
+      "position": "общински съветник",
+      "candidate": "Иван И.Т. (обвиняемият)"
     },
     "location": "гр. Ямбол",
     "vote_sellers_mentioned": {
@@ -847,7 +845,7 @@
     "verdict": "виновен",
     "punishment": "3 години лишаване от свобода (отложено за 5 години); глоба 13 000 BGN; забрана да заема длъжност свързана с избирателни права (3 години)",
     "article": "чл. 167, ал. 2 НК вр. с чл. 26, ал. 1 НК",
-    "crime_date": "24.03.2017",
+    "crime_date": "края на септември - 25 октомври 2015",
     "penal_code_article": "чл. 167, ал. 3 НК",
     "verdict_type": "trial_verdict"
   },
@@ -1630,18 +1628,19 @@
       "year": 2019
     },
     "judgment_date": "18.11.2019",
-    "crime_date": "неустановена точна дата през месец октомври 2019",
+    "crime_date": "края на септември - 25 октомври 2015",
     "election": {
       "type": "местни",
-      "year": "редактирано",
-      "election_date": "редактирано"
+      "year": "2015",
+      "election_date": "25.10.2015"
     },
     "accused": {
       "count": 1,
       "details": [
         {
-          "education": "н.д.",
-          "occupation": "н.д."
+          "name": "Иван И. Т, с прякор Х.",
+          "education": "средно",
+          "occupation": "безработен"
         }
       ]
     },
@@ -1650,7 +1649,9 @@
       "currency": "BGN"
     },
     "beneficiary": {
-      "party": "редактирано"
+      "party": "ДПС",
+      "position": "общински съветник",
+      "candidate": "Иван И.Т. (обвиняемият)"
     },
     "location": "гр. Ямбол",
     "vote_sellers_mentioned": {
