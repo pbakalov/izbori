@@ -1,4 +1,4 @@
-import { getSidsByDate, getSidResults, getSidHist, getPlaceHist, getParties } from './api_utils.js'
+import { getSidsByDate, getSidResults, getPlaceResults, getSidHist, getPlaceHist, getParties } from './api_utils.js'
 import { CSVCombobox, isMobile, renameMap } from './shared.js'
 
 function initializeMobileMenu() {
@@ -50,6 +50,15 @@ function showSidDetails(el, sid) {
     document.getElementById('text').innerHTML = loadingMsg;
     getSidResults(el, sid).then(sidData => {
         const newContent = sidDetail(sidData, el, sid);
+        // TODO plot
+        document.getElementById('text').innerHTML = newContent;
+    });
+}
+
+function showPlaceDetails(el, ekatte) {
+    document.getElementById('text').innerHTML = loadingMsg;
+    getPlaceResults(el, ekatte).then(placeData => {
+        const newContent = placeDetail(placeData, el, ekatte);
         // TODO plot
         document.getElementById('text').innerHTML = newContent;
     });
@@ -110,7 +119,23 @@ function updatePlot(jsonData, parties, ekatte=null)  {
         tableHTML += '</tr></thead><tbody>';
         
         dates.forEach(key => {
-            tableHTML += `<tr><td>${key}</td>`;
+            let dateCell = `<td>${key}</td>`;
+            
+            // Add link if conditions are met
+            if (ekatte !== null) {
+                // ekatte is present, create link with ekatte and el (date)
+                dateCell = `<td><a href="hist?ekatte=${ekatte}&el=${key}">${key}</a></td>`;
+            } else if (sid !== null) {
+                // sid is present, check if it contains only one SID
+                const sidArray = sid.split(';');
+                if (sidArray.length === 1) {
+                    // Only one SID, create link with sid and el (date)
+                    dateCell = `<td><a href="hist?sid=${sid}&el=${key}">${key}</a></td>`;
+                }
+                // If multiple SIDs, dateCell remains plain text
+            }
+            
+            tableHTML += `<tr>${dateCell}`;
             cols.forEach(col => {
                 const value = jsonData[col][key];
                 tableHTML += `<td>${value}</td>`;
@@ -221,6 +246,71 @@ function sidDetail(sidData, el, sid) {
     return tableHTML + voteTableHTML;
 }
 
+function placeDetail(placeData, el, ekatte) {
+    const skipKeys = ['region', 'station', 'admin_reg', 'municipality', 'place', 'address', 'ekatte'];
+
+    const _metadataKeys = [
+        'n_stations', 
+        'eligible_voters', 
+        'total_valid', 
+        'total'
+    ];
+
+    // metadata
+    let tableHTML = `<h3>${el}</h3>`; 
+    tableHTML += '<table><thead><tr><th>Данни за населеното место</th><th></th></tr></thead><tbody>';
+    
+    // Get place details from combobox options
+    const placeOptions = document.getElementById('placeOptions');
+    const matchingOption = Array.from(placeOptions.children).find(
+        option => option.dataset.value === String(ekatte)
+    );
+    
+    if (matchingOption) {
+        const placeName = matchingOption.dataset.placeName;
+        const municipalityName = matchingOption.dataset.municipalityName;
+        const regionName = matchingOption.dataset.regionName;
+        
+        tableHTML += `<tr><td>Място</td><td>${placeName}</td></tr>`;
+        tableHTML += `<tr><td>Община</td><td>${municipalityName}</td></tr>`;
+        tableHTML += `<tr><td>Област</td><td>${regionName}</td></tr>`;
+    }
+    
+    tableHTML += `<tr><td>ЕКАТТЕ</td><td>${ekatte}</td></tr>`;
+    _metadataKeys.forEach(key => {
+        if (!renameMap.hasOwnProperty(key)) renameMap[key] = key;
+        if (!skipKeys.includes(key)) {
+            const value = placeData[key][String(ekatte)] || 'н.д.'; 
+            tableHTML += `<tr><td>${renameMap[key]}</td><td>${value}</td></tr>`;
+        };
+    });
+    tableHTML += '</tbody></table>';
+
+    // votes
+    const partyVotes = [];
+
+    for (const key in placeData) {
+        if (!_metadataKeys.includes(key)) {
+            if (!renameMap.hasOwnProperty(key)) renameMap[key] = key;
+            const votes = placeData[key][String(ekatte)];
+            partyVotes.push({ party: renameMap[key], votes: votes });
+        }
+    }
+
+    partyVotes.sort((a, b) => b.votes - a.votes);
+
+    let voteTableHTML = '<h4>Резултати</h4>'; 
+    voteTableHTML += '<table><thead><tr><th>Партия</th><th>Гласове</th></tr></thead><tbody>';
+    
+    partyVotes.forEach(item => {
+        voteTableHTML += `<tr><td>${item.party}</td><td>${item.votes}</td></tr>`;
+    });
+    
+    voteTableHTML += '</tbody></table>';
+
+    return tableHTML + voteTableHTML;
+}
+
 function generateHTML(sidsByDate) {
     const pageUrl = `${window.location.pathname}`
     let htmlOutput = '';
@@ -254,7 +344,10 @@ async function populateComboBox(csvFilePath, inputId, datalistId) { //provides s
         if (ekatte && place) {
             const option = document.createElement("option");
             option.value = `${place.trim()} (${municipality_name.trim()})`;
-            option.dataset.value = ekatte.trim(); 
+            option.dataset.value = ekatte.trim();
+            option.dataset.placeName = place.trim();
+            option.dataset.municipalityName = municipality_name.trim();
+            option.dataset.regionName = region_name.trim();
             dataList.appendChild(option);
         }
     });
@@ -366,7 +459,7 @@ populateComboBox(
         updatePlaceInput(ekatte);
         partyCombobox.setOptions(party.split(';'));
     } else if (ekatte!==null && el!==null) {
-        //TODO showPlaceDetails(el, ekatte);
+         showPlaceDetails(el, ekatte);
         updatePlaceInput(ekatte);
     } else if (ekatte!==null) {
         showSidsByDate(ekatte);
