@@ -11,6 +11,8 @@ export const renameMap = {
     'ekatte' : 'ЕКАТТЕ',
     'municipality_name' : 'Община',
     'region_name' : 'Избирателен район',
+    'country_name' : 'Държава',
+    'station_type' : 'Вид секция',
 }
 
 export class CSVCombobox {

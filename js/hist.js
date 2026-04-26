@@ -50,6 +50,7 @@ function showSidDetails(el, sid) {
     document.getElementById('text').innerHTML = loadingMsg;
     getSidResults(el, sid).then(sidData => {
         const newContent = sidDetail(sidData, el, sid);
+        // TODO plot
         document.getElementById('text').innerHTML = newContent;
     });
 }
@@ -188,8 +189,8 @@ function sidDetail(sidData, el, sid) {
     tableHTML += '<table><thead><tr><th>Данни за секцията</th><th></th></tr></thead><tbody>';
     metadataKeys.forEach(key => {
         if (!renameMap.hasOwnProperty(key)) renameMap[key] = key;
-        const value = sidData[key][sid] || 'н.д.'; 
         if (!skipKeys.includes(key)) {
+            const value = sidData[key][sid] || 'н.д.'; 
             tableHTML += `<tr><td>${renameMap[key]}</td><td>${value}</td></tr>`;
         };
     });
@@ -324,8 +325,8 @@ function updatePlaceInput(ekatte) { // TODO adjust for multiple ekatte
 }
 
 const metadataKeys = [
-    "place", "address", "admin_reg", "ekatte", "eligible_voters",
-    "municipality", "municipality_name", "station", "region", "region_name"
+    "place", "address", "ekatte", "eligible_voters",
+    "municipality_name", "station_type", "region_name", "country_name", "municipality", "station",
 ];
 
 const loadingMsg = 'Зарежда се ...';
