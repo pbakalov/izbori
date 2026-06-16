@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Преходи на гласоподаватели</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <script src='https://cdn.plot.ly/plotly-2.35.2.min.js'></script>
+    <link rel="stylesheet" href="css/tm.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Преходи на гласоподаватели <span id="periodLabel"></span></h1>
+
+        <div class="controls">
+            <label>Метод:</label>
+            <div id="tmSelect" class="model-picker"></div>
+        </div>
+
+        <div id="loadingMsg" class="loading-msg">Зарежда се...</div>
+
+        <div id="chart"></div>
+
+        <div id="contact">
+            За коментари и намерени грешки: <a href="https://twitter.com/petar_baka">@petar_baka</a>. QP анализ: Ивайло Парчев.
+        </div>
+    </div>
+
+    <script type='module' src="js/tm.js"></script>
+</body>
+</html>
