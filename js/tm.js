@@ -5,6 +5,7 @@ const tmDir = 'assets/data/tm';
 const csvFilenames = [
     'votes_tm_2024_2026.csv',
     'votes_tm_2024_2026_qp.csv',
+    'votes_tm_2024_2026_ei.csv',
 ];
 
 // Categories that aren't parties - shown in grayscale and translated to Bulgarian
@@ -17,7 +18,7 @@ const structuralCategories = {
     'removed_voters': 'Отписани от списъците',
 };
 
-const methodNames = { '': 'lphom', 'qp': 'QP' };
+const methodNames = { '': 'lphom', 'qp': 'QP', 'ei' : 'EI' };
 
 // Links below this many votes are dropped as noise (e.g. -0.0 / 0.0 entries)
 const minLinkValue = 1;
