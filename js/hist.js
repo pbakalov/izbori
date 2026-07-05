@@ -30,6 +30,13 @@ function initializeMobileMenu() {
 
     partySelect.addEventListener('change', updateMenuSummary);
     placeSelect.addEventListener('change', updateMenuSummary);
+
+    const viewToggleCheckbox = document.getElementById('viewToggleCheckbox');
+    const viewToggleLabel = document.getElementById('viewToggleLabel');
+    viewToggleCheckbox.addEventListener('change', () => {
+        document.body.classList.toggle('mobile-show-table', viewToggleCheckbox.checked);
+        viewToggleLabel.textContent = viewToggleCheckbox.checked ? 'Покажи графика' : 'Покажи таблица';
+    });
 }
 
 function showSidHistory(sid, party) {
@@ -107,9 +114,9 @@ function updatePlot(jsonData, parties, ekatte=null)  {
     }
 
     const traces = ['eligible_voters', 'total'].concat(parties);
-    
-    // metadata (only show if not mobile)
-    if (!isMobile()) {
+
+    // metadata
+    {
         const meta = document.getElementById('text');
         tableHTML += '<table><thead><tr>';
         tableHTML += '<th>Дата</th>';
@@ -179,18 +186,30 @@ function updatePlot(jsonData, parties, ekatte=null)  {
     };
 
     if (isMobile()) {
+        const isLandscape = window.innerWidth > window.innerHeight;
         Object.assign(layout, {
             width: window.innerWidth,
             height: window.innerHeight - 70, // account for collapsed menu; can we infer the size from the css?
-            margin: {
+            margin: isLandscape ? {
+                l: 40,
+                r: 110, // room for the vertical legend
+                t: 70, // space for the title
+                b: 40
+            } : {
                 l: 40,
                 r: 20,
                 t: 70, // space for the title
-                b: 20
+                b: 90 // room for the horizontal legend below the x-axis labels
             },
-            legend: {
+            legend: isLandscape ? {
+                orientation: 'v',
+                x: 1.02,
+                xanchor: 'left',
+                y: 0.5,
+                yanchor: 'middle'
+            } : {
                 orientation: 'h',
-                y: -0.2,
+                y: -0.35,
                 x: 0.5,
                 xanchor: 'center'
             }
@@ -425,7 +444,11 @@ const metadataKeys = [
 const loadingMsg = 'Зарежда се ...';
 const defaultParties = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Пеев;ДПС-Доган';
 
-const urlParams = new URLSearchParams(window.location.search); 
+if (!window.location.search) {
+    window.location.replace(`${window.location.pathname}?party=ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Доган;ДПС-Пеев;ПП/ДБ;ПП;ДБ;ПБ`);
+}
+
+const urlParams = new URLSearchParams(window.location.search);
 const ekatte = urlParams.get('ekatte');
 const el = urlParams.get('el');
 const sid = urlParams.get('sid');
