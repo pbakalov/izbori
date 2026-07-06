@@ -185,6 +185,11 @@ body {
         font-size: 14px;
     }
 
+    /* No chart to switch to on detail-only pages (SID/place details, SID list) */
+    .no-chart .view-toggle {
+        display: none;
+    }
+
     /* Full-screen chart */
     #chart {
         position: fixed;
