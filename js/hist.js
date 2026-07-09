@@ -38,7 +38,7 @@ function initializeMobileMenu() {
     });
 }
 
-// Some views (election/SID details, SID list) render only a table, no chart.
+// Some views (SID list) render only a table, no chart.
 // On mobile, default those to the table and hide the now-irrelevant switch.
 function setMobileView(showTable, hideToggle=false) {
     if (!isMobile()) return;
