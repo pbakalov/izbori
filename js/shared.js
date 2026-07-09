@@ -5,6 +5,7 @@ export const renameMap = {
     'n_stations' : 'Секции',
     'invalid' : 'Невалидни',
     'total' : 'Общо гласували',
+    'total_valid' : 'Валидни (вкл. НПН)',
     'npn' : 'Не подкрепям никого',
     'place' : 'Населено място',
     'address' : 'Адрес',

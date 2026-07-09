@@ -25,7 +25,8 @@ body {
 
 #text table {
     border-collapse: collapse;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     margin-bottom: 1em;
 }
 
@@ -183,6 +184,11 @@ body {
         gap: 8px;
         margin-top: 12px;
         font-size: 14px;
+    }
+
+    /* No chart to switch to on detail-only pages (SID list) */
+    .no-chart .view-toggle {
+        display: none;
     }
 
     /* Full-screen chart */
