@@ -23,19 +23,21 @@ export class CSVCombobox {
         hiddenValueId,
         delimiter = ';',
         multiSelect = false,
-        tagsContainerId = null
+        tagsContainerId = null,
+        placeholder = 'избери партии'
     } = {}) {
         // DOM Elements
         this.input = document.getElementById(inputId);
         this.optionsList = document.getElementById(listId);
         this.hiddenValueInput = document.getElementById(hiddenValueId);
-        this.tagsContainer = tagsContainerId 
-            ? document.getElementById(tagsContainerId) 
+        this.tagsContainer = tagsContainerId
+            ? document.getElementById(tagsContainerId)
             : null;
-        
+
         // Configuration
         this.delimiter = delimiter;
         this.multiSelect = multiSelect;
+        this.placeholder = placeholder;
         this.parties = parties;
         
         // State
@@ -204,12 +206,12 @@ export class CSVCombobox {
         });
 
         // Update input placeholder
-        this.input.placeholder = this.selectedValues.size 
-            ? `${this.selectedValues.size} избрани` 
-            : 'избери партии';
+        this.input.placeholder = this.selectedValues.size
+            ? `${this.selectedValues.size} избрани`
+            : this.placeholder;
     }
 
-    setOptions(selectedOptions) { // pass options "from outside"
+    setOptions(selectedOptions, silent = false) { // pass options "from outside"
         this.selectedValues.clear();
 
         // add new options (& validate)
@@ -226,7 +228,9 @@ export class CSVCombobox {
 
         // update this.hiddenValueInput.value + dispatch event
         this.hiddenValueInput.value = Array.from(this.selectedValues).join(this.delimiter);
-        this.hiddenValueInput.dispatchEvent(new Event('change'));
+        if (!silent) {
+            this.hiddenValueInput.dispatchEvent(new Event('change'));
+        }
     }
 
     showOptions() {

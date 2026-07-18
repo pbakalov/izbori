@@ -29,11 +29,22 @@
                         </datalist>
                     </div>
                     <div>
+                        <input type="text" id="sidCombobox" class="combobox-input" placeholder="избери секция">
+                        <div class="multi-select-tags" id="sidSelectedTags"></div>
+                    </div>
+                    <div>
+                        <input type="text" id="elCombobox" class="combobox-input" placeholder="избери дата">
+                    </div>
+                    <div>
                         <input type="text" id="partyCombobox" class="combobox-input" placeholder="избери партии">
                         <div class="multi-select-tags" id="partySelectedTags"></div>
                     </div>
                     <div id="partyOptionsList" class="options-list"></div>
                     <input type="hidden" id="partySelectedValue">
+                    <div id="sidOptionsList" class="options-list"></div>
+                    <input type="hidden" id="sidSelectedValue">
+                    <div id="elOptionsList" class="options-list"></div>
+                    <input type="hidden" id="elSelectedValue">
                 </div>
                 <div class="view-toggle" id="viewToggle">
                     <label class="switch">
