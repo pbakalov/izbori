@@ -17,7 +17,7 @@ export const renameMap = {
 }
 
 export class CSVCombobox {
-    constructor(parties, {
+    constructor(options, {
         inputId,
         listId,
         hiddenValueId,
@@ -38,12 +38,13 @@ export class CSVCombobox {
         this.delimiter = delimiter;
         this.multiSelect = multiSelect;
         this.placeholder = placeholder;
-        this.parties = parties;
-        
+        this.rawOptions = options;
+
         // State
         this.selectedValues = new Set();
         this.allOptions = [];
-        
+        this.optionsByValue = new Map();
+
         // Initialize asynchronously
         this.init();
     }
@@ -54,9 +55,9 @@ export class CSVCombobox {
         this.optionsList.classList.add('loading');
 
         try {
-            // Transform parties array to 2D format for internal use
-            this.transformPartiesArray(this.parties);
-            
+            // Normalize options to {value, label, ...metadata} for internal use
+            this.transformOptions(this.rawOptions);
+
             // Setup event listeners and render options
             this.setupEventListeners();
             this.renderOptions();
@@ -70,30 +71,37 @@ export class CSVCombobox {
         }
     }
 
-    transformPartiesArray(parties) {
-        // TODO have the API /parties return name : label pairs?
-        this.allOptions = parties.map(party => {
-            const value = party;
-            const label = renameMap[party] || party;
-            return [value, label];
+    // Each entry is either a plain string (value; label derived from renameMap)
+    // or an already-formed {value, label, ...metadata} object (label used as-is).
+    transformOptions(options) {
+        this.allOptions = options.map(entry => {
+            if (typeof entry === 'string') {
+                return { value: entry, label: renameMap[entry] || entry };
+            }
+            return entry;
         });
+        this.optionsByValue = new Map(this.allOptions.map(option => [option.value, option]));
+    }
+
+    // Look up an option's full data (value, label, and any extra metadata) by value.
+    getOption(value) {
+        return this.optionsByValue.get(value);
     }
 
     renderOptions() {
         this.optionsList.innerHTML = '';
-        this.allOptions.forEach(row => {
-            const value = row[0];
-            const label = row[1];
-            
+        this.allOptions.forEach(option => {
+            const { value, label } = option;
+
             const optionElement = document.createElement('div');
             optionElement.textContent = label;
             optionElement.dataset.value = value;
-            
+
             // Mark as selected if already in selectedValues
             if (this.selectedValues.has(value)) {
                 optionElement.classList.add('selected');
             }
-            
+
             optionElement.addEventListener('click', () => this.selectOption(label, value));
             this.optionsList.appendChild(optionElement);
         });
@@ -103,7 +111,7 @@ export class CSVCombobox {
         // Input handling
         this.input.addEventListener('input', (e) => this.filterOptions(e.target.value));
         this.input.addEventListener('focus', () => this.showOptions());
-        
+
         // Close options when clicking outside
         document.addEventListener('click', (e) => {
             if (!this.input.contains(e.target) && !this.optionsList.contains(e.target)) {
@@ -113,28 +121,27 @@ export class CSVCombobox {
     }
 
     filterOptions(searchTerm) {
-        const filteredOptions = this.allOptions.filter(row => 
-            row[1].toLowerCase().includes(searchTerm.toLowerCase())
+        const filteredOptions = this.allOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
         );
-        
+
         this.optionsList.innerHTML = '';
-        filteredOptions.forEach(row => {
-            const value = row[0];
-            const label = row[1];
-            
+        filteredOptions.forEach(option => {
+            const { value, label } = option;
+
             const optionElement = document.createElement('div');
             optionElement.textContent = label;
             optionElement.dataset.value = value;
-            
+
             // Mark as selected if already in selectedValues
             if (this.selectedValues.has(value)) {
                 optionElement.classList.add('selected');
             }
-            
+
             optionElement.addEventListener('click', () => this.selectOption(label, value));
             this.optionsList.appendChild(optionElement);
         });
-        
+
         this.showOptions();
     }
 
@@ -179,12 +186,11 @@ export class CSVCombobox {
 
         // Create tags for each selected option
         this.selectedValues.forEach(value => {
-            // Find the full row for this value
-            const row = this.allOptions.find(r => r[0] === value);
-            if (!row) return;
+            const option = this.optionsByValue.get(value);
+            if (!option) return;
 
-            const label = row[1];
-            
+            const label = option.label;
+
             // Create tag element
             const tagElement = document.createElement('div');
             tagElement.classList.add('multi-select-tag');
@@ -216,7 +222,7 @@ export class CSVCombobox {
 
         // add new options (& validate)
         selectedOptions.forEach(value => {
-            if (this.allOptions.some(option => option[0].toLowerCase() === value.toLowerCase())) {
+            if (this.allOptions.some(option => option.value.toLowerCase() === value.toLowerCase())) {
                 this.selectedValues.add(value);
             };
         });
