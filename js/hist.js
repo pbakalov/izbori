@@ -481,8 +481,6 @@ function updateSelection() {
     const partyValue = partySelect.value;
     const chart = document.getElementById('chart');
 
-    console.log('el:', el, 'sid:', sid, 'ekatte:', ekatte, 'party:', partyValue);
-
     if (partyValue && ekatte) { // show place history plot
         showPlaceHistory(ekatte, partyValue);
         updateUrl(ekatte, null, partyValue);
@@ -596,7 +594,6 @@ const sidSelect = document.getElementById('sidSelectedValue');
 const elSelect = document.getElementById('elSelectedValue');
 
 partySelect.addEventListener('change', () => {
-    console.log('pchange');
     updateSelection();
 });
 placeSelect.addEventListener('change', () => {
@@ -617,7 +614,6 @@ elSelect.addEventListener('change', () => {
     updateSelection();
 });
 
-console.log(el, sid, ekatte, party);
 initializeMobileMenu();
 if (ekatte!==null && party!==null) {
     placeCombobox.setOptions(ekatte.split(';'), true);
@@ -634,7 +630,6 @@ if (ekatte!==null && party!==null) {
     sidCombobox.setOptions(sid.split(';'), true);
     partyCombobox.setOptions(party.split(';'));
 } else if (party!==null) {
-    console.log('startup');
     partyCombobox.setOptions(party.split(';'));
 } else if (el!==null) { // election totals
     elCombobox.setOptions([el], true);
