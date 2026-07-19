@@ -24,9 +24,8 @@
                 </div>
                 <div id='placeAndPartySelection' class="combobox-wrapper">
                     <div>
-                        <input type="text" id="placeCombobox" class="combobox-input" placeholder="избери място" list="placeOptions">
-                        <datalist id="placeOptions">
-                        </datalist>
+                        <input type="text" id="placeCombobox" class="combobox-input" placeholder="избери място">
+                        <div class="multi-select-tags" id="placeSelectedTags"></div>
                     </div>
                     <div>
                         <input type="text" id="sidCombobox" class="combobox-input" placeholder="избери секция">
@@ -45,6 +44,8 @@
                     <input type="hidden" id="sidSelectedValue">
                     <div id="elOptionsList" class="options-list"></div>
                     <input type="hidden" id="elSelectedValue">
+                    <div id="placeOptionsList" class="options-list"></div>
+                    <input type="hidden" id="placeSelectedValue">
                 </div>
                 <div class="view-toggle" id="viewToggle">
                     <label class="switch">
