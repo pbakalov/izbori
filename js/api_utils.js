@@ -22,7 +22,7 @@ export async function getPlaceResults(el, ekatte) {
     return data;
 }
 
-export async function getElectionResults(el) {
+export async function getElectionTotals(el) {
     const url=`${ApiBaseUrl}/single_election_data?el=${el}`;
 
     const data = await fetchData(url);

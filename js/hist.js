@@ -1,4 +1,4 @@
-import { getSidsByDate, getSidResults, getPlaceResults, getElectionResults, getSidHist, getPlaceHist, getParties, getAllSids, getElectionIds } from './api_utils.js'
+import { getSidsByDate, getSidResults, getPlaceResults, getElectionTotals, getSidHist, getPlaceHist, getParties, getAllSids, getElectionIds } from './api_utils.js'
 import { CSVCombobox, isMobile, renameMap } from './shared.js'
 
 function initializeMobileMenu() {
@@ -88,7 +88,7 @@ function showElectionTotals(el) {
     setMobileView(false);
     document.getElementById('text').innerHTML = loadingMsg;
     document.getElementById('chart').innerHTML = loadingMsg;
-    getElectionResults(el).then(data => {
+    getElectionTotals(el).then(data => {
         updateSingleElectionTotalsPlot(data, el);
     });
 }
