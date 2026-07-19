@@ -1,4 +1,4 @@
-import { getSidsByDate, getSidResults, getPlaceResults, getSidHist, getPlaceHist, getParties } from './api_utils.js'
+import { getSidsByDate, getSidResults, getPlaceResults, getElectionTotals, getSidHist, getPlaceHist, getParties, getAllSids, getElectionIds } from './api_utils.js'
 import { CSVCombobox, isMobile, renameMap } from './shared.js'
 
 function initializeMobileMenu() {
@@ -19,12 +19,12 @@ function initializeMobileMenu() {
     });
 
     function updateMenuSummary() { // possibly merge with updateSelection
-        const placeValue = document.getElementById('placeCombobox').value;
+        const placeValues = Array.from(placeCombobox.selectedValues);
         const partyValues = Array.from(partyCombobox.selectedValues);
-        
-        summaryPlace.textContent = placeValue || 'Избери място';
-        summaryParties.textContent = partyValues.length ? 
-            `${partyValues.length} избрани партии` : 
+
+        summaryPlace.textContent = placeValues.length ? `${placeValues.length} избрани места` : 'Избери място';
+        summaryParties.textContent = partyValues.length ?
+            `${partyValues.length} избрани партии` :
             'Избери партии';
     }
 
@@ -81,6 +81,15 @@ function showPlaceDetails(el, ekatte) {
     document.getElementById('chart').innerHTML = loadingMsg;
     getPlaceResults(el, ekatte).then(placeData => {
         updateSingleElectionPlot(placeData, el, ekatte, null);
+    });
+}
+
+function showElectionTotals(el) {
+    setMobileView(false);
+    document.getElementById('text').innerHTML = loadingMsg;
+    document.getElementById('chart').innerHTML = loadingMsg;
+    getElectionTotals(el).then(data => {
+        updateSingleElectionTotalsPlot(data, el);
     });
 }
 
@@ -250,12 +259,29 @@ const nonPartyKeys = [
 // Vote categories always broken out as their own bar, even outside the top 5.
 const fixedVoteCategories = ['invalid', 'npn'];
 
-function getPartyVotes(data, key) {
+// keys is ignored when data[col] is already an aggregated scalar (national totals,
+// aggregated server-side); otherwise it's a per-key dict (ekatte/sid queries) and we sum over keys.
+function sumField(data, col, keys) {
+    const value = data[col];
+    if (typeof value !== 'object' || value === null) {
+        return Number(value || 0);
+    }
+    return keys.reduce((sum, k) => sum + Number(value[k] || 0), 0);
+}
+
+function categoricalField(data, col, keys) {
+    const values = [...new Set(keys.map(k => data[col][k]).filter(v => v !== undefined))];
+    if (values.length === 0) return 'н.д.';
+    if (values.length === 1) return values[0];
+    return `${values.length} различни стойности`;
+}
+
+function getPartyVotes(data, keys) {
     const partyVotes = [];
     for (const col in data) {
         if (!nonPartyKeys.includes(col)) {
             if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
-            partyVotes.push({ key: col, party: renameMap[col], votes: data[col][key] });
+            partyVotes.push({ key: col, party: renameMap[col], votes: sumField(data, col, keys) });
         }
     }
     partyVotes.sort((a, b) => b.votes - a.votes);
@@ -277,59 +303,18 @@ function buildElectionBars(partyVotes, totalValid) {
     return bars;
 }
 
-/**
- * Single election, ekatte or SID: results table + bar chart.
- */
-function updateSingleElectionPlot(data, el, ekatte=null, sid=null) {
-    const key = ekatte !== null ? String(ekatte) : sid;
-
-    let tableHTML;
-    if (ekatte !== null) {
-        tableHTML = `<h3>${el}</h3>`;
-        tableHTML += '<table><thead><tr><th>Данни за населеното место</th><th></th></tr></thead><tbody>';
-
-        const placeOptions = document.getElementById('placeOptions');
-        const matchingOption = Array.from(placeOptions.children).find(
-            option => option.dataset.value === String(ekatte)
-        );
-        if (matchingOption) {
-            tableHTML += `<tr><td>Място</td><td>${matchingOption.dataset.placeName}</td></tr>`;
-            tableHTML += `<tr><td>Община</td><td>${matchingOption.dataset.municipalityName}</td></tr>`;
-            tableHTML += `<tr><td>Област</td><td>${matchingOption.dataset.regionName}</td></tr>`;
-        }
-        tableHTML += `<tr><td>ЕКАТТЕ</td><td>${ekatte}</td></tr>`;
-        ['n_stations', 'eligible_voters', 'total_valid', 'total'].forEach(col => {
-            if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
-            const value = data[col][key] || 'н.д.';
-            tableHTML += `<tr><td>${renameMap[col]}</td><td>${value}</td></tr>`;
-        });
-        tableHTML += '</tbody></table>';
-    } else {
-        const skipKeys = ['region', 'station', 'admin_reg', 'municipality'];
-        tableHTML = `<h3>${el} секция ${sid}</h3>`;
-        tableHTML += '<table><thead><tr><th>Данни за секцията</th><th></th></tr></thead><tbody>';
-        metadataKeys.forEach(col => {
-            if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
-            if (!skipKeys.includes(col)) {
-                const value = data[col][key] || 'н.д.';
-                tableHTML += `<tr><td>${renameMap[col]}</td><td>${value}</td></tr>`;
-            }
-        });
-        tableHTML += '</tbody></table>';
-    }
-
-    const partyVotes = getPartyVotes(data, key);
-
-    tableHTML += '<h4>Резултати</h4>';
-    tableHTML += '<table><thead><tr><th>Партия</th><th>Гласове</th></tr></thead><tbody>';
+function renderVotesTable(partyVotes) {
+    let html = '<h4>Резултати</h4>';
+    html += '<table><thead><tr><th>Партия</th><th>Гласове</th></tr></thead><tbody>';
     partyVotes.forEach(item => {
-        tableHTML += `<tr><td>${item.party}</td><td>${item.votes}</td></tr>`;
+        html += `<tr><td>${item.party}</td><td>${item.votes}</td></tr>`;
     });
-    tableHTML += '</tbody></table>';
+    html += '</tbody></table>';
+    return html;
+}
 
-    document.getElementById('text').innerHTML = tableHTML;
-
-    const bars = buildElectionBars(partyVotes, Number(data['total_valid'][key]));
+function renderElectionBarChart(partyVotes, totalValid, title) {
+    const bars = buildElectionBars(partyVotes, totalValid);
 
     const chartData = [{
         x: bars.map(b => b.party),
@@ -339,7 +324,7 @@ function updateSingleElectionPlot(data, el, ekatte=null, sid=null) {
     }];
 
     const layout = {
-        title: ekatte !== null ? 'Резултати' : `Резултати секция ${sid}`,
+        title,
         xaxis: {
             automargin: true
         },
@@ -372,6 +357,91 @@ function updateSingleElectionPlot(data, el, ekatte=null, sid=null) {
     Plotly.newPlot('chart', chartData, layout);
 }
 
+/**
+ * Single election, ekatte(s) or SID(s): results table + bar chart.
+ * ekatte/sid may be a single value or a ';'-joined list; numeric fields are
+ * summed across all selected keys, non-numeric fields show the shared value
+ * or "N different values" when they differ.
+ */
+function updateSingleElectionPlot(data, el, ekatte=null, sid=null) {
+    const keys = ekatte !== null ? [...new Set(ekatte.split(';'))] : [...new Set(sid.split(';'))];
+
+    let tableHTML;
+    if (ekatte !== null) {
+        tableHTML = `<h3>${el}</h3>`;
+        tableHTML += '<table><thead><tr><th>Данни за населеното место</th><th></th></tr></thead><tbody>';
+
+        // TODO: single_election_data doesn't return place/municipality/region name for
+        // the ekatte case (unlike sid's address/place/etc.), so we look them up from the
+        // placeCombobox instead. Update the API to include these fields directly,
+        // then switch this to categoricalField() like the sid branch below.
+        const placeMetaField = (attr) => {
+            const values = [...new Set(keys.map(k => placeCombobox.getOption(k)?.[attr]).filter(Boolean))];
+            if (values.length === 0) return null;
+            return values.length === 1 ? values[0] : `${values.length} различни стойности`;
+        };
+        const placeName = placeMetaField('placeName');
+        const municipalityName = placeMetaField('municipalityName');
+        const regionName = placeMetaField('regionName');
+        if (placeName !== null) tableHTML += `<tr><td>Място</td><td>${placeName}</td></tr>`;
+        if (municipalityName !== null) tableHTML += `<tr><td>Община</td><td>${municipalityName}</td></tr>`;
+        if (regionName !== null) tableHTML += `<tr><td>Област</td><td>${regionName}</td></tr>`;
+
+        tableHTML += `<tr><td>ЕКАТТЕ</td><td>${ekatte}</td></tr>`;
+        ['n_stations', 'eligible_voters', 'total_valid', 'total'].forEach(col => {
+            if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
+            tableHTML += `<tr><td>${renameMap[col]}</td><td>${sumField(data, col, keys)}</td></tr>`;
+        });
+        tableHTML += '</tbody></table>';
+    } else {
+        const skipKeys = ['region', 'station', 'admin_reg', 'municipality'];
+        const numericCols = ['eligible_voters'];
+        tableHTML = `<h3>${el} секция ${sid}</h3>`;
+        tableHTML += '<table><thead><tr><th>Данни за секцията</th><th></th></tr></thead><tbody>';
+        metadataKeys.forEach(col => {
+            if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
+            if (!skipKeys.includes(col)) {
+                const value = numericCols.includes(col)
+                    ? sumField(data, col, keys)
+                    : categoricalField(data, col, keys);
+                tableHTML += `<tr><td>${renameMap[col]}</td><td>${value}</td></tr>`;
+            }
+        });
+        tableHTML += '</tbody></table>';
+    }
+
+    const partyVotes = getPartyVotes(data, keys);
+    tableHTML += renderVotesTable(partyVotes);
+
+    document.getElementById('text').innerHTML = tableHTML;
+
+    const title = ekatte !== null ? 'Резултати' : `Резултати секция ${sid}`;
+    renderElectionBarChart(partyVotes, sumField(data, 'total_valid', keys), title);
+}
+
+/**
+ * Election totals across all sections: results table + bar chart.
+ * The API returns already-aggregated scalars for this (no ekatte/sid filter),
+ * so no keys/summing needed, and there's no per-place metadata to show.
+ */
+function updateSingleElectionTotalsPlot(data, el) {
+    let tableHTML = `<h3>${el}</h3>`;
+    tableHTML += '<h4>Обобщени данни (всички секции)</h4>';
+    tableHTML += '<table><thead><tr><th>Обобщени данни</th><th></th></tr></thead><tbody>';
+    ['n_stations', 'eligible_voters', 'total_valid', 'total'].forEach(col => {
+        if (!renameMap.hasOwnProperty(col)) renameMap[col] = col;
+        tableHTML += `<tr><td>${renameMap[col]}</td><td>${sumField(data, col, [])}</td></tr>`;
+    });
+    tableHTML += '</tbody></table>';
+
+    const partyVotes = getPartyVotes(data, []);
+    tableHTML += renderVotesTable(partyVotes);
+
+    document.getElementById('text').innerHTML = tableHTML;
+
+    renderElectionBarChart(partyVotes, sumField(data, 'total_valid', []), `Обобщени резултати (${el})`);
+}
+
 function generateHTML(sidsByDate) {
     const pageUrl = `${window.location.pathname}`
     let htmlOutput = '';
@@ -389,71 +459,52 @@ function generateHTML(sidsByDate) {
     return htmlOutput;
 }
 
-async function populateComboBox(csvFilePath, inputId, datalistId) { //provides some customizations that are missing in CSVCombobox
+async function loadPlaceOptions(csvFilePath) {
     const response = await fetch(csvFilePath);
     const csvText = await response.text();
     const rows = csvText.split("\n").map(row => row.trim());
     rows.shift(); // remove headers
 
-    const inputElement = document.getElementById(inputId);
-    const dataList = document.getElementById(datalistId);
-
-    dataList.innerHTML = ""; 
-
-    rows.forEach(row => {
-        const [ind, ekatte, region_name, municipality_name, place, notes, nuts4] = row.split(";");
-        if (ekatte && place) {
-            const option = document.createElement("option");
-            option.value = `${place.trim()} (${municipality_name.trim()})`;
-            option.dataset.value = ekatte.trim();
-            option.dataset.placeName = place.trim();
-            option.dataset.municipalityName = municipality_name.trim();
-            option.dataset.regionName = region_name.trim();
-            dataList.appendChild(option);
-        }
-    });
-
-    inputElement.addEventListener("change", () => {
-        const selectedText = inputElement.value;
-        const selectedOption = Array.from(dataList.children).find(
-            option => option.value === selectedText
-        );
-
-        if (selectedOption) {
-            //console.log("Display:", selectedOption.value); // Visible text
-            //console.log("Value:", selectedOption.dataset.value); // Hidden value
-            //window.location.href = `${window.location.href}?ekatte=${selectedOption.dataset.value}`;
-        } else {
-            console.log("Custom input:", selectedText);
-        }
-    });
+    return rows
+        .map(row => row.split(";"))
+        .filter(([ind, ekatte, region_name, municipality_name, place]) => ekatte && place)
+        .map(([ind, ekatte, region_name, municipality_name, place]) => ({
+            value: ekatte.trim(),
+            label: `${place.trim()} (${municipality_name.trim()})`,
+            placeName: place.trim(),
+            municipalityName: municipality_name.trim(),
+            regionName: region_name.trim()
+        }));
 }
 
 function updateSelection() {
     const partyValue = partySelect.value;
-    const placeValue = placeSelect.value; // place (municipality)
-    const placeOptions = document.getElementById('placeOptions'); // ekatte matching placeValue
-    const chart = document.getElementById('chart'); 
+    const chart = document.getElementById('chart');
 
-    if (partyValue && placeValue) { // show place history plot
-        const ekatte = Array.from(placeOptions.children).find(
-            option => option.value === placeValue
-        ).dataset.value;
+    if (partyValue && ekatte) { // show place history plot
         showPlaceHistory(ekatte, partyValue);
         updateUrl(ekatte, null, partyValue);
     } else if (partyValue && sid) { // show sid history plot
         showSidHistory(sid, partyValue);
         updateUrl(null, sid, partyValue);
-    } else if (placeValue) { // show SIDs by date
-        const ekatte = Array.from(placeOptions.children).find(
-            option => option.value === placeValue
-        ).dataset.value;
+    } else if (el !== null && sid) { // single-election SID details (re-render on tag add/remove)
+        showSidDetails(el, sid);
+        updateUrl(null, sid, null, el);
+    } else if (el !== null && ekatte) { // single-election EKATTE details
+        showPlaceDetails(el, ekatte);
+        updateUrl(ekatte, null, null, el);
+    } else if (ekatte) { // show SIDs by date
         updateUrl(ekatte);
         showSidsByDate(ekatte);
         chart.innerHTML = '';
+    // TODO el & party: sortable table (+backend paging)
     } else if (partyValue) { // national totals
-        showPlaceHistory(ekatte, partyValue);
+        elCombobox.setOptions([], true);
+        showPlaceHistory(ekatte, partyValue); // ekatte guaranteed null here by branch order above
         updateUrl(null, null, partyValue);
+    } else if (el !== null) { // all selections cleared, still viewing a specific election -> show its totals
+        showElectionTotals(el);
+        updateUrl(null, null, null, el);
     }
 }
 
@@ -469,15 +520,6 @@ function updateUrl (ekatte=null, sid=null, party=null, el=null) {
     window.history.replaceState(null, '', newUrl);
 };
 
-function updatePlaceInput(ekatte) { // TODO adjust for multiple ekatte
-    const inputElement = document.getElementById('placeCombobox');
-    const placeOptions = document.getElementById('placeOptions'); 
-    const placeName = Array.from(placeOptions.children).find(
-        option => option.dataset.value === String(ekatte)
-    ).value;
-    inputElement.value = placeName;
-}
-
 const metadataKeys = [
     "place", "address", "ekatte", "eligible_voters",
     "municipality_name", "station_type", "region_name", "country_name", "municipality", "station",
@@ -491,9 +533,9 @@ if (!window.location.search) {
 }
 
 const urlParams = new URLSearchParams(window.location.search);
-const ekatte = urlParams.get('ekatte');
-const el = urlParams.get('el');
-const sid = urlParams.get('sid');
+let ekatte = urlParams.get('ekatte');
+let el = urlParams.get('el');
+let sid = urlParams.get('sid');
 const party = urlParams.get('party');
 
 const parties = await getParties();
@@ -506,6 +548,38 @@ const partyCombobox = new CSVCombobox(parties, {
 });
 await partyCombobox.init(); // some overhead, as it's called in the constructor
 
+const sids = await getAllSids();
+const sidCombobox = new CSVCombobox(sids, {
+    inputId: 'sidCombobox',
+    listId: 'sidOptionsList',
+    hiddenValueId: 'sidSelectedValue',
+    tagsContainerId: 'sidSelectedTags',
+    multiSelect: true,
+    placeholder: 'избери секция'
+});
+await sidCombobox.init();
+
+const placeOptions = await loadPlaceOptions(`assets/data/geo/place_data.csv`); //TODO get place data from API/repo
+const placeCombobox = new CSVCombobox(placeOptions, {
+    inputId: 'placeCombobox',
+    listId: 'placeOptionsList',
+    hiddenValueId: 'placeSelectedValue',
+    tagsContainerId: 'placeSelectedTags',
+    multiSelect: true,
+    placeholder: 'избери място'
+});
+await placeCombobox.init();
+
+const electionIds = await getElectionIds();
+const elCombobox = new CSVCombobox(Object.keys(electionIds), {
+    inputId: 'elCombobox',
+    listId: 'elOptionsList',
+    hiddenValueId: 'elSelectedValue',
+    multiSelect: false,
+    placeholder: 'избери дата'
+});
+await elCombobox.init();
+
 window.addEventListener('resize', () => {
     const chart = document.getElementById('chart');
     if (chart.data) {
@@ -514,34 +588,56 @@ window.addEventListener('resize', () => {
     }
 });
 
-populateComboBox(
-    `assets/data/geo/place_data.csv`, //TODO get place data from API/repo
-    "placeCombobox", 
-    "placeOptions"
-).then(() => {
-    initializeMobileMenu();
-    if (ekatte!==null && party!==null) {
-        updatePlaceInput(ekatte);
-        partyCombobox.setOptions(party.split(';'));
-    } else if (ekatte!==null && el!==null) {
-         showPlaceDetails(el, ekatte);
-        updatePlaceInput(ekatte);
-    } else if (ekatte!==null) {
-        showSidsByDate(ekatte);
-        updatePlaceInput(ekatte);
-    } else if (el!==null && sid!==null) {
-        showSidDetails(el, sid);
-    } else if (sid!==null && party!==null) {
-        partyCombobox.setOptions(party.split(';'));
-    } else if (party!==null) {
-        partyCombobox.setOptions(party.split(';'));
-    } else {
-        document.getElementById('text').innerHTML = '';
-    }
+const placeSelect = document.getElementById('placeSelectedValue');
+const partySelect = document.getElementById('partySelectedValue');
+const sidSelect = document.getElementById('sidSelectedValue');
+const elSelect = document.getElementById('elSelectedValue');
+
+partySelect.addEventListener('change', () => {
+    updateSelection();
+});
+placeSelect.addEventListener('change', () => {
+    ekatte = placeSelect.value || null;
+    sid = null;
+    sidCombobox.setOptions([], true);
+    updateSelection();
+});
+sidSelect.addEventListener('change', () => {
+    sid = sidSelect.value || null;
+    ekatte = null;
+    placeCombobox.setOptions([], true);
+    updateSelection();
+});
+elSelect.addEventListener('change', () => {
+    el = elSelect.value || null;
+    partyCombobox.setOptions([], true);
+    updateSelection();
 });
 
-const placeSelect = document.getElementById('placeCombobox');
-const partySelect = document.getElementById('partySelectedValue');
+initializeMobileMenu();
+if (ekatte!==null && party!==null) {
+    placeCombobox.setOptions(ekatte.split(';'), true);
+    partyCombobox.setOptions(party.split(';'));
+} else if (ekatte!==null && el!==null) {
+    placeCombobox.setOptions(ekatte.split(';'), true);
+    elCombobox.setOptions([el], true);
+    showPlaceDetails(el, ekatte);
+} else if (el!==null && sid!==null) {
+    sidCombobox.setOptions(sid.split(';'), true);
+    elCombobox.setOptions([el], true);
+    showSidDetails(el, sid);
+} else if (sid!==null && party!==null) { // sid history
+    sidCombobox.setOptions(sid.split(';'), true);
+    partyCombobox.setOptions(party.split(';'));
+} else if (party!==null) {
+    partyCombobox.setOptions(party.split(';'));
+} else if (el!==null) { // election totals
+    elCombobox.setOptions([el], true);
+    showElectionTotals(el);
+} else if (ekatte!==null) { // ekatte details page
+    placeCombobox.setOptions(ekatte.split(';'), true);
+    showSidsByDate(ekatte);
+} else {
+    document.getElementById('text').innerHTML = '';
+}
 
-partySelect.addEventListener('change', updateSelection);
-placeSelect.addEventListener('change', updateSelection);

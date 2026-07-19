@@ -22,6 +22,13 @@ export async function getPlaceResults(el, ekatte) {
     return data;
 }
 
+export async function getElectionTotals(el) {
+    const url=`${ApiBaseUrl}/single_election_data?el=${el}`;
+
+    const data = await fetchData(url);
+    return data;
+}
+
 export async function getSidHist(sid, party) {
     const url=`${ApiBaseUrl}/data?sid=${sid}&party=${party}`;
 
@@ -65,6 +72,13 @@ export async function getParties() {
 
     const data = await fetchData(url);
     return data.parties;
+}
+
+export async function getAllSids() {
+    const url=`${ApiBaseUrl}all_sids`;
+
+    const data = await fetchData(url);
+    return data.sids;
 }
 
 export async function getSidsData(sids) {
