@@ -1,331 +1,427 @@
-let csvData;
-let geojsonData;
+import { style, highlightFeature, createLegend, getFeatureColor } from './maps_shared.js';
+import { getElectionIds, getParties, getMapData, getGeojsonDescriptor } from './api_utils.js';
+import { isMobile, CSVCombobox, renameMap } from './shared.js';
+
+// This map shows one municipality at polling-station resolution. Everything
+// except the boundary polygons comes from the API, so adding an election needs
+// no change here.
+const MUNICIPALITY = 'Столична';
+const LAYER = 'sid';
+
+// The combobox uses an empty selection to mean "colour by turnout"; the API
+// spells that 'total'.
+const TURNOUT = 'total';
+
+// Columns of a by-station response that are not ballot lines.
+const NOT_BALLOT = new Set([
+    'id', 'total', 'total_valid', 'eligible_voters', 'eligible_voters_added',
+    'eligible_voters_total', 'n_stations', 'partyGroup',
+]);
+
 let map;
+let geojsonData;
 let geojsonLayer;
-var info = L.control();
-let selectedColumn = 'ГЕРБ-СДС';
+let currentHighlight = null;
+let partyCombobox = null;
 
-document.getElementById("csvDropdown").addEventListener("change", function(event) {
-    updateGeojson(event).then(populateDropdown); 
-});
+const info = L.control();
+let legend = createLegend('result');
 
-document.getElementById('showInfo').addEventListener('click', showInfoBox);
-document.getElementById('hideInfo').addEventListener('click', showInfoBox);
+// Boundary files are ~5 MB, and several elections share one, so cache by the
+// source date the API reports rather than by election.
+const geojsonCache = new Map();
+let joinMode = 'sid';
+let boundaryId = null;
 
-loadGeoJSON('apr21').then(initializeMap); 
+let selectedParties = '';
+let rowsByKey = new Map();
 
-function loadCSV(el_date) {
-    const csvFilename = "../assets/data/mestni/sofia_" + el_date + "_pct.csv";
+/** The join key for a station id, per the descriptor's `join`. */
+function keyOf(sid) {
+    const text = String(sid);
+    return joinMode === 'sid_tail' ? text.slice(-7) : text;
+}
 
-    return new Promise((resolve, reject) => {
-        Papa.parse(csvFilename, {
-            download: true,
-            header: true,
-            dynamicTyping: true,
-            complete: (result) => {
-                csvData = result.data;
-                resolve(result);  
-            },
-            error: (error) => {
-                reject(error); 
-            }
-        });
+/** The API's split-orient payload as an array of row objects. */
+function rowsFromResponse(response) {
+    const { columns, index, data } = response;
+    return data.map((values, row) => {
+        const out = { id: index[row] };
+        columns.forEach((column, i) => { out[column] = values[i]; });
+        return out;
     });
 }
 
-function updateGeojson(event) {
-    const el_date = event.target.value;
+// ---------------------------------------------------------------------------
+// startup
+// ---------------------------------------------------------------------------
 
-    return loadGeoJSON(el_date)
-        .then(() => {
-            map.removeLayer(geojsonLayer);
+async function populateElectionDropdown() {
+    const elections = await getElectionIds({ elType: 'all', mun: MUNICIPALITY });
+    const dropdown = document.getElementById('csvDropdown');
+    dropdown.innerHTML = '';
 
-            geojsonLayer = L.geoJson(geojsonData, {
-                style: style,
-                onEachFeature: onEachFeature
-            }).addTo(map);
-        })
-        .catch(error => {
-            console.error("Failed to load new GeoJSON data:", error);
-        });
-}
-
-function loadGeoJSON(el_date) {
-  const jsonFile = "../assets/data/mestni/sofia_" + el_date + ".json";
-
-  return fetch(jsonFile)
-    .then((response) => response.json())
-    .then((data) => {
-      geojsonData = data;
-      return loadCSV(el_date); 
-    });
-}
-
-function matchData(columnName) { // TODO: get rid of this (no need to add data to the GeoJSON features; you can fetch data dynamically from the csv as needed)
-  geojsonData.features.forEach((feature) => {
-    const match = csvData.find((row) => ('0' + row.id).slice(-9) === feature.properties.sid); 
-    if (match) {
-      feature.properties[columnName] = match[columnName];
-      feature.properties['total'] = match['total']; 
-      feature.properties['eligible_voters'] = match['eligible_voters']; 
-      feature.properties['активност'] = match['активност']; 
-    } else {
-      console.log('no match ', columnName)
-      feature.properties[columnName] = NaN;
-      feature.properties['total'] = NaN; 
-      feature.properties['eligible_voters'] = NaN; 
-      feature.properties['активност'] = NaN; 
+    if (!elections) {
+        dropdown.innerHTML = '<option value="">няма връзка със сървъра</option>';
+        return null;
     }
-  });
+
+    // Ids are date-prefixed, so sorting them sorts chronologically.
+    for (const el of Object.keys(elections).sort()) {
+        const option = document.createElement('option');
+        option.value = el;
+        option.textContent = elections[el];
+        dropdown.appendChild(option);
+    }
+
+    const urlEl = new URLSearchParams(window.location.search).get('el');
+    const available = Array.from(dropdown.options).map(o => o.value);
+    dropdown.value = available.includes(urlEl)
+        ? urlEl
+        : available[available.length - 1]; // default to the most recent
+
+    return dropdown.value;
 }
 
-function style(feature) {
-	return {
-		weight: 2,
-		opacity: 1,
-		color: 'white',
-		dashArray: '3',
-		fillOpacity: 0.7,
-        fillColor: getColor(feature.properties[selectedColumn]),
-	};
+/**
+ * Rebuild the party menu for one election, keeping whatever the reader had
+ * selected that still stands. An empty result means turnout.
+ */
+async function refreshPartyMenu(el, keepSelection = true) {
+    const ballot = await getParties({ el, mun: MUNICIPALITY }) || [];
+    const wanted = keepSelection
+        ? selectedParties.split(';').filter(p => p && p !== TURNOUT)
+        : [];
+
+    if (partyCombobox === null) {
+        partyCombobox = new CSVCombobox(ballot, {
+            inputId: 'partyCombobox',
+            listId: 'partyOptionsList',
+            hiddenValueId: 'partySelectedValue',
+            tagsContainerId: 'partySelectedTags',
+            multiSelect: true,
+        });
+        await partyCombobox.init();
+        document.getElementById('partySelectedValue')
+            .addEventListener('change', onPartySelection);
+    } else {
+        partyCombobox.rawOptions = ballot;
+        partyCombobox.transformOptions(ballot);
+    }
+
+    // setOptions validates against the new ballot, so anything that no longer
+    // stands is dropped, and it refreshes the tags and the hidden input. The
+    // silent flag stops it firing a change event: the caller reloads the data
+    // itself, and we do not want two requests for one switch.
+    partyCombobox.setOptions(wanted, true);
+    selectedParties = partyCombobox.hiddenValueInput.value || TURNOUT;
 }
 
-function highlightFeature(e) {
-	var layer = e.target;
+/** Fetch the boundaries for an election, reusing the file when it is shared. */
+async function loadGeoJSON(el) {
+    const descriptor = await getGeojsonDescriptor({ el, layer: LAYER });
+    if (!descriptor || !descriptor.url) {
+        throw new Error(`no ${LAYER} boundaries for ${el}`);
+    }
 
-	layer.setStyle({
-		weight: 5,
-		color: '#666',
-		dashArray: '',
-		fillOpacity: 0.7
-	});
+    joinMode = descriptor.join;
+    boundaryId = descriptor.id;
 
-	if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-		layer.bringToFront();
-	}
+    if (geojsonCache.has(descriptor.url)) {
+        geojsonData = geojsonCache.get(descriptor.url);
+        return descriptor;
+    }
 
-	info.update(layer.feature.properties, selectedColumn);
+    const response = await fetch(descriptor.url);
+    if (!response.ok) {
+        throw new Error(`could not fetch ${descriptor.url}: ${response.statusText}`);
+    }
+    geojsonData = await response.json();
+    geojsonCache.set(descriptor.url, geojsonData);
+    return descriptor;
 }
 
-function zoomToFeature(e) {
-	map.fitBounds(e.target.getBounds());
+/** Fetch one election's results and attach them to the loaded features. */
+async function loadResults(el) {
+    const party = selectedParties === TURNOUT ? null : selectedParties;
+    const response = await getMapData({
+        el, party, groupby: 'sid', mun: MUNICIPALITY,
+    });
+
+    rowsByKey = new Map();
+    if (response && response.index) {
+        for (const row of rowsFromResponse(response)) {
+            rowsByKey.set(keyOf(row.id), row);
+        }
+    }
+    matchData();
 }
 
-function resetHighlight(e) {
-	geojsonLayer.resetStyle(e.target);
-	info.update(undefined, selectedColumn);
+function matchData() {
+    geojsonData.features.forEach((feature) => {
+        const row = rowsByKey.get(keyOf(feature.properties.sid));
+        const props = feature.properties;
+
+        if (!row) {
+            props.row = null;
+            props.value = NaN;
+            props.value_prop = NaN;
+            props.total = NaN;
+            props.eligible_voters = NaN;
+            return;
+        }
+
+        props.row = row;
+        props.total = row.total;
+        props.eligible_voters = row.eligible_voters;
+
+        if (selectedParties === TURNOUT) {
+            props.value = row.total;
+            props.value_prop = row.total / row.eligible_voters;
+        } else {
+            props.value = row.partyGroup;
+            props.value_prop = row.partyGroup / row.total;
+        }
+    });
 }
+
+// ---------------------------------------------------------------------------
+// interaction
+// ---------------------------------------------------------------------------
 
 function onEachFeature(feature, layer) {
-	layer.on({
-		mouseover: highlightFeature,
-		mouseout: resetHighlight,
-		click: zoomToFeature,
-		dbclick: function(e) {
+    layer.on({
+        mouseover: (e) => {
+            if (currentHighlight !== null) {
+                geojsonLayer.resetStyle(currentHighlight);
+            }
+            currentHighlight = e.target;
             highlightFeature(e);
-            zoomToFeature(e);
-        }
-	});
+            info.update(layer.feature.properties);
+        },
+        mouseout: (e) => {
+            geojsonLayer.resetStyle(e.target);
+            info.update(undefined);
+            currentHighlight = null;
+        },
+        click: (e) => {
+            map.fitBounds(e.target.getBounds());
+            highlightFeature(e);
+            info.update(layer.feature.properties);
+        },
+    });
 }
+
+function repaint() {
+    geojsonLayer.setStyle(feature => getFeatureColor(feature, 'result'));
+    info.update(undefined);
+    updateUrl();
+}
+
+async function onElectionChange() {
+    const el = document.getElementById('csvDropdown').value;
+    await refreshPartyMenu(el);
+    await loadGeoJSON(el);
+
+    map.removeLayer(geojsonLayer);
+    geojsonLayer = L.geoJson(geojsonData, {
+        style: (feature) => style(feature, 'result'),
+        onEachFeature,
+    }).addTo(map);
+
+    await loadResults(el);
+    repaint();
+}
+
+async function onPartySelection() {
+    selectedParties = this.value === '' ? TURNOUT : this.value;
+    await loadResults(document.getElementById('csvDropdown').value);
+    repaint();
+}
+
+function updateUrl() {
+    const center = map.getCenter();
+    const el = document.getElementById('csvDropdown').value;
+    const params = new URLSearchParams({
+        lat: center.lat,
+        lng: center.lng,
+        zoom: map.getZoom(),
+        el,
+        party: selectedParties,
+    });
+    window.history.replaceState(null, '', `${window.location.pathname}?${params}`);
+}
+
+// ---------------------------------------------------------------------------
+// info box
+// ---------------------------------------------------------------------------
+
+function partyLabel(parties) {
+    return parties.split(';').map(p => renameMap[p] || p).join(';');
+}
+
+function ballotTable(row) {
+    if (!row) return '';
+    const lines = Object.keys(row)
+        .filter(key => !NOT_BALLOT.has(key))
+        .sort((a, b) => row[b] - row[a]);
+    const selected = new Set(selectedParties.split(';'));
+
+    let html = '<table><thead><tr>';
+    html += '<th>Партия/Кандидат</th><th>Гласове</th><th>Дял</th>';
+    html += '</tr></thead><tbody>';
+    for (const key of lines) {
+        const votes = row[key];
+        const share = votes / row.total;
+        const bold = selected.has(key);
+        const open = bold ? '<b>' : '';
+        const close = bold ? '</b>' : '';
+        html += `<tr><td>${open}${renameMap[key] || key}${close}</td>`;
+        html += `<td>${open}${votes}${close}</td>`;
+        html += `<td>${open}${isNaN(share) ? 'н.д.' : share.toFixed(2)}${close}</td></tr>`;
+    }
+    return `${html}</tbody></table>`;
+}
+
+function generateTextbox(props) {
+    const dropdown = document.getElementById('csvDropdown');
+    const electionLabel = dropdown.options[dropdown.selectedIndex]
+        ? dropdown.options[dropdown.selectedIndex].textContent
+        : '';
+
+    const turnout = selectedParties === TURNOUT;
+    let textbox = turnout
+        ? `<h4>Активност (${electionLabel})</h4>`
+        : `<h4>Резултати ${partyLabel(selectedParties)} (${electionLabel})</h4>`;
+
+    if (!props) {
+        return `${textbox}Посочете секция.`;
+    }
+
+    const row = props.row;
+    textbox += `<b>Секция ${props.sid}</b><br>`;
+
+    if (!row) {
+        return `${textbox}Няма данни за тази секция в избраните избори.`;
+    }
+
+    if (turnout) {
+        textbox += `Общо гласували: ${row.total}<br>`;
+        textbox += `Избиратели по списък: ${row.eligible_voters}<br>`;
+        const pct = 100 * row.total / row.eligible_voters;
+        textbox += `Активност: ${isNaN(pct) ? 'н.д.' : pct.toFixed(1)}%<br>`;
+    } else {
+        const pct = 100 * row.partyGroup / row.total;
+        textbox += `${partyLabel(selectedParties)}<br>гласове: ${row.partyGroup} `;
+        textbox += `(${isNaN(pct) ? 'н.д.' : pct.toFixed(1)}%)<br>`;
+    }
+
+    const el = document.getElementById('csvDropdown').value;
+    const geojsonId = boundaryId || '';
+    textbox += `<a href="../hist.html?sid=${props.sid}&party=${encodeURIComponent(selectedParties)}" target="_blank">виж история</a>`;
+    textbox += ` | <a href="../table.html?el=${encodeURIComponent(el)}&mun=${encodeURIComponent(MUNICIPALITY)}&groupby=sid&geojson=${encodeURIComponent(geojsonId)}" target="_blank">данните в табличен вид</a><br>`;
+    textbox += ballotTable(row);
+    textbox += `Общо гласували (вкл. невалидни): ${row.total}<br>`;
+    textbox += `Валидни (вкл. НПН): ${row.total_valid}<br>`;
+    textbox += `Избиратели по списък: ${row.eligible_voters}<br>`;
+    if (row.eligible_voters_added) {
+        textbox += `Дописани в изборния ден: ${row.eligible_voters_added}<br>`;
+    }
+    return textbox;
+}
+
+// ---------------------------------------------------------------------------
+// map
+// ---------------------------------------------------------------------------
 
 function initializeMap() {
-  map = L.map('map').setView([42.691, 23.333], 12);
+    map = L.map('map').setView([42.691, 23.333], 12);
 
-  var tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  	maxZoom: 19,
-  	attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>|<a href="https://twitter.com/petar_baka">petar_baka</a>|<a href="https://data-for-good.bg/">Данни за добро</a>'
-  }).addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>|<a href="https://twitter.com/petar_baka">petar_baka</a>|<a href="https://data-for-good.bg/">Данни за добро</a>',
+    }).addTo(map);
 
-  geojsonLayer = L.geoJson(geojsonData, {
-   	style: style,
-  	onEachFeature: onEachFeature
-  }).addTo(map);
+    geojsonLayer = L.geoJson(geojsonData, {
+        style: (feature) => style(feature, 'result'),
+        onEachFeature,
+    }).addTo(map);
 
-  info.onAdd = function (map) {
-  	this._div = L.DomUtil.create('div', 'info');
-  	this.update();
-  	return this._div;
-  };
+    info.onAdd = function () {
+        this._div = L.DomUtil.create('div', 'info');
+        this.update();
+        return this._div;
+    };
 
-  info.update = function (props, selectedColumn) {
-    var selectedYear = document.getElementById('csvDropdown');
-    var selectedYearText = selectedYear.options[selectedYear.selectedIndex].textContent;;
-    var table = ''; 
-  	var textbox = '<h4>Резултати ' + selectedColumn + ' (' + selectedYearText + ')</h4>';
-
-    if (props) {
-        table = generateTableHtmlForRowById(props.sid);
-
-        textbox += '<b>Секция ' + props.sid + '</b><br>';
-
-        if (selectedColumn !== 'активност') {
-            textbox += selectedColumn + ' гласове: ' +  Math.round(props[selectedColumn]*props['total']) + '<br>' 
-        } else {
-            // TODO: breakdown valid votes, invalid votes, total 
-            // TODO: breakdown initial voter list, added to voter list, total 
-            textbox += 'Общо валидни гласове: ' +  Math.round(props[selectedColumn]*props['eligible_voters']) + '<br>' 
-            textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
+    info.update = function (props) {
+        this._div.innerHTML = '';
+        let closeButton;
+        if (props && isMobile()) {
+            closeButton = L.DomUtil.create('button', 'close-btn', this._div);
+            closeButton.innerHTML = 'x';
+            closeButton.style.float = 'right';
         }
-        textbox += selectedColumn + ` (%): ${isNaN(props[selectedColumn]) ? props[selectedColumn] : (100*props[selectedColumn]).toFixed(1)}<br>`
-        textbox += table + '<br>'
-        textbox += 'Общо валидни гласове: ' +  props['total']  + '<br>'
-        textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
-        textbox += `Валидни гласове/избиратели по списък: ${isNaN(props['активност']) ? props['активност'] : props['активност'].toFixed(2)}<br>`
-    } else {
-        textbox += 'Посочете секция.'
-    };
-
-  	this._div.innerHTML = textbox;
-  };
-
-  info.addTo(map);
-
-  var legend = L.control({position: 'bottomleft'});
-
-  legend.onAdd = function (map) {
-
-      var div = L.DomUtil.create('div', 'info legend');
-      var grades = [0, .1, .2, .3, .4, .5, .6, .7, .8];
-      var labels = [];
-      var from, to;
-
-      for (var i = 0; i < grades.length; i++) {
-          from = grades[i];
-          to = grades[i + 1];
-
-          labels.push(
-              '<i style="background:' + getColor(from + 0.0001) + '"></i> ' +
-              from + (to ? '&ndash;' + to : '+'));
-      }
-
-      div.innerHTML = labels.join('<br>');
-      return div;
-  };
-
-  legend.addTo(map);
-
-  populateDropdown();
-  document.getElementById("columnsDropdown").addEventListener("change", updateColumn);
-}
-
-
-function populateDropdown() {
-  const dropdown = document.getElementById("columnsDropdown");
-  const columns = Object.keys(csvData[0]);
-  let parties = [];
-  const excluded = ['id', 'eligible_voters', 'total'];
-
-  dropdown.innerHTML = ''; 
-
-  columns.forEach((column) => {
-    
-    if (! excluded.includes(column)) { 
-      const option = document.createElement("option");
-      option.value = column;
-      option.textContent = column;
-      dropdown.appendChild(option);
-      parties.push(column)
-    }
-  });
-
-  if ((selectedColumn == null) || !( columns.includes(selectedColumn))) { 
-    selectedColumn = parties[0]; 
-  } else if (columns.includes(selectedColumn)) {
-    dropdown.value = selectedColumn;
-  };
-
-  matchData(selectedColumn);
-  geojsonLayer.setStyle(feature => {
-    return {
-      fillColor: getColor(feature.properties[selectedColumn]),
-      
-    };
-  });
-
-  info.update(undefined, selectedColumn);
-}
-
-function updateColumn(event) {
-  selectedColumn = event.target.value;
-  matchData(selectedColumn);
-  geojsonLayer.setStyle(feature => {
-    return {
-      fillColor: getColor(feature.properties[selectedColumn]),
-      
-    };
-  });
-  info.update(undefined, selectedColumn);
-}
-
-function generateTableHtmlForRowById(targetId) {
-    
-    const targetRow  = csvData.find((row) => ('0000000' + row.id).slice(-9) === targetId); 
-
-    if (!targetRow) return '';
-
-    let html = '<table>';
-
-    html += '<thead><tr>';
-    html += '<th>Партия/Кандидат</th>';
-    html += '<th>Гласове</th>';
-    html += '<th>Гласове/<br>общо валидни</th>';
-    html += '</tr></thead>';
-
-    html += '<tbody><tr>';
-    for (let key in targetRow) {
-        if (key !== "total" && key !== "id" && key !== 'eligible_voters' && key !== 'активност') {  
-            const originalValue = targetRow[key];
-            const multipliedValue = originalValue * targetRow.total;
-
-            html += `<tr>`;
-            html += `<td>${key}</td>`;
-            html += `<td>${Math.round(multipliedValue)}</td>`;
-            html += `<td>${isNaN(originalValue) ? originalValue : originalValue.toFixed(2)}</td>`;
-            html += `</tr>`;
+        const content = L.DomUtil.create('div', 'info-content', this._div);
+        content.innerHTML = generateTextbox(props);
+        if (closeButton) {
+            L.DomEvent.on(closeButton, 'click', () => info.update(undefined));
         }
+    };
+
+    info.addTo(map);
+    legend.addTo(map);
+
+    const params = new URLSearchParams(window.location.search);
+    const lat = parseFloat(params.get('lat'));
+    const lng = parseFloat(params.get('lng'));
+    const zoom = parseInt(params.get('zoom'), 10);
+    if (lat && lng && zoom) {
+        map.setView([lat, lng], zoom);
     }
-    html += '</tr></tbody>';
 
-    html += '</table>';
-    return html;
-}
-
-function interpolateColor(color1, color2, factor) {
-    const r = Math.round(color1[0] + factor * (color2[0] - color1[0]));
-    const g = Math.round(color1[1] + factor * (color2[1] - color1[1]));
-    const b = Math.round(color1[2] + factor * (color2[2] - color1[2]));
-    return `rgb(${r}, ${g}, ${b})`;
-}
-
-function getColor(d) {
-    const colors = [ // check out https://colorbrewer2.org/?type=sequential&scheme=YlOrRd&n=9
-        [255,255,204],
-        [255,237,160],
-        [254,217,118],
-        [254,178,76],
-        [253,141,60],
-        [252,78,42],
-        [227,26,28],
-        [189,0,38],
-        [128,0,38]
-    ];
-
-	if (isNaN(d)) return 'rgb(255,255,204)';
-    if (d <= 0) return 'rgb(255,255,204)';
-    if (d >= 0.8) return 'rgb(128,0,38)';
-
-    const index = Math.floor(d * 10); 
-    const factor = (d * 10) - index;  
-
-    return interpolateColor(colors[index], colors[index + 1], factor);
+    map.on('moveend zoomend', updateUrl);
 }
 
 function showInfoBox() {
-    var infoBox = document.getElementById('infoBox');
-    if (infoBox.style.display === 'none') {
-        infoBox.style.display = 'block';
-    } else {
-        infoBox.style.display = 'none';
-    }
+    const box = document.getElementById('infoBox');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
 }
 
+function initializeMobileMenu() {
+    const toggle = document.getElementById('menuToggle');
+    const content = document.querySelector('.menu-content');
+    if (!toggle || !content) return;
+
+    toggle.addEventListener('click', () => {
+        content.classList.toggle('show');
+        const open = content.classList.contains('show');
+        toggle.querySelector('.menu-text').textContent = open ? 'Затвори' : 'Меню';
+        toggle.querySelector('.menu-icon').textContent = open ? '×' : '☰';
+    });
+}
+
+// ---------------------------------------------------------------------------
+
+async function start() {
+    document.getElementById('showInfo').addEventListener('click', showInfoBox);
+    document.getElementById('hideInfo').addEventListener('click', showInfoBox);
+    document.getElementById('csvDropdown')
+        .addEventListener('change', () => { onElectionChange(); });
+    initializeMobileMenu();
+
+    const el = await populateElectionDropdown();
+    if (el === null) return;
+
+    const urlParty = new URLSearchParams(window.location.search).get('party');
+    if (urlParty) {
+        selectedParties = urlParty;
+    }
+
+    await refreshPartyMenu(el);
+    await loadGeoJSON(el);
+    await loadResults(el);
+    initializeMap();
+    repaint();
+}
+
+start().catch(error => console.error('Грешка при зареждане на картата:', error));
