@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="utf-8">
+    <title>Изборни резултати в табличен вид</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel="stylesheet" href="css/table.css">
+</head>
+
+<body>
+<header class="table-header">
+    <h1 id="title">Изборни резултати</h1>
+    <p id="subtitle" class="muted"></p>
+
+    <div class="controls">
+        <label>
+            Избори
+            <select id="elSelect"></select>
+        </label>
+        <label>
+            Групиране
+            <select id="groupbySelect">
+                <option value="ekatte">по населени места</option>
+                <option value="sid">по секции</option>
+            </select>
+        </label>
+        <label>
+            Община
+            <select id="munSelect"></select>
+        </label>
+        <label>
+            Слой
+            <select id="geojsonSelect"></select>
+        </label>
+        <label>
+            <input type="checkbox" id="abroad">
+            секции в чужбина
+        </label>
+    </div>
+
+    <div class="controls">
+        <label class="coverage" id="coverageBox" hidden>
+            <input type="checkbox" id="onlyMissing">
+            <span id="coverage"></span>
+        </label>
+        <label>
+            Ред на страница
+            <select id="pageSize">
+                <option>25</option>
+                <option selected>50</option>
+                <option>100</option>
+                <option>250</option>
+            </select>
+        </label>
+        <a id="backToMap" href="#" hidden>← към картата</a>
+    </div>
+</header>
+
+<main>
+    <p id="status" class="muted">Зарежда се…</p>
+    <div class="table-scroll">
+        <table id="results">
+            <thead><tr id="head"></tr></thead>
+            <tbody id="body"></tbody>
+        </table>
+    </div>
+
+    <nav class="pager" id="pager" hidden>
+        <button id="first" type="button">«</button>
+        <button id="prev" type="button">‹</button>
+        <span id="pageInfo"></span>
+        <button id="next" type="button">›</button>
+        <button id="last" type="button">»</button>
+    </nav>
+</main>
+
+<script type='module' src="js/table.js"></script>
+</body>
+</html>

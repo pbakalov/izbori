@@ -14,6 +14,9 @@ export const renameMap = {
     'region_name' : 'Избирателен район',
     'country_name' : 'Държава',
     'station_type' : 'Вид секция',
+    'on_map' : 'На картата',
+    'eligible_voters_added' : 'Под линия',
+    'eligible_voters_total' : 'По списък + под линия',
 }
 
 export class CSVCombobox {

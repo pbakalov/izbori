@@ -1,0 +1,134 @@
+:root {
+    --ink: #222;
+    --muted: #666;
+    --rule: #ddd;
+    --accent: #1c5da0;
+    --missing: #fff6f6;
+}
+
+body {
+    margin: 0;
+    padding: 0 16px 48px;
+    font: 14px/1.5 Arial, Helvetica, sans-serif;
+    color: var(--ink);
+}
+
+.table-header {
+    padding: 16px 0 8px;
+    border-bottom: 1px solid var(--rule);
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 2;
+}
+
+h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+}
+
+.muted {
+    color: var(--muted);
+    margin: 0 0 8px;
+}
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+}
+
+.controls label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.coverage input {
+    margin: 0;
+}
+
+a {
+    color: var(--accent);
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13px;
+}
+
+th, td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--rule);
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* The key and any text column read better left-aligned. */
+th:first-child, td:first-child,
+td.text, th.text {
+    text-align: left;
+}
+
+thead th {
+    position: sticky;
+    top: 0;
+    background: #fafafa;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 2px solid var(--rule);
+}
+
+thead th:hover {
+    color: var(--accent);
+}
+
+thead th .arrow {
+    color: var(--accent);
+    font-size: 11px;
+}
+
+tbody tr:hover {
+    background: #f6f9fc;
+}
+
+/* Rows with no polygon are not drawn on the map. */
+tbody tr.missing {
+    background: var(--missing);
+}
+
+tbody tr.missing td:first-child::after {
+    content: ' ✗';
+    color: #b2182b;
+}
+
+.pager {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 0;
+}
+
+.pager button {
+    min-width: 36px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.pager button[disabled] {
+    opacity: 0.4;
+    cursor: default;
+}
+
+@media (max-width: 768px) {
+    body { padding: 0 8px 32px; }
+    table { font-size: 12px; }
+    th, td { padding: 3px 5px; }
+}
