@@ -132,3 +132,50 @@ tbody tr.missing td:first-child::after {
     table { font-size: 12px; }
     th, td { padding: 3px 5px; }
 }
+
+/* The figures a reader checks against the official tally. */
+.summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 24px;
+    padding: 10px 0 2px;
+    font-size: 13px;
+}
+
+.summary .figure {
+    display: flex;
+    flex-direction: column;
+}
+
+.summary .figure b {
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+}
+
+.summary .figure span {
+    color: var(--muted);
+}
+
+.summary .warn {
+    color: #b2182b;
+    font-weight: bold;
+}
+
+.summary .scope {
+    color: var(--muted);
+    font-style: italic;
+}
+
+/* Totals live in the sticky head, so they stay visible while scrolling and
+   any row can be compared against them without scrolling back. */
+thead tr.totals-row th {
+    top: 28px;
+    background: #f1f5f9;
+    cursor: default;
+    font-variant-numeric: tabular-nums;
+    border-bottom: 2px solid var(--rule);
+}
+
+thead tr.totals-row th:hover {
+    color: inherit;
+}
