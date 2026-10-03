@@ -58,9 +58,13 @@
 
 <main>
     <p id="status" class="muted">Зарежда се…</p>
+    <div id="summary" class="summary" hidden></div>
     <div class="table-scroll">
         <table id="results">
-            <thead><tr id="head"></tr></thead>
+            <thead>
+                <tr id="head"></tr>
+                <tr id="totalsRow" class="totals-row"></tr>
+            </thead>
             <tbody id="body"></tbody>
         </table>
     </div>
