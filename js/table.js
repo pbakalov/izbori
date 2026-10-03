@@ -86,6 +86,79 @@ function renderHead(columns, sort) {
     }
 }
 
+const nf = new Intl.NumberFormat('bg-BG');
+
+function renderTotals(payload) {
+    const row = document.getElementById('totalsRow');
+    row.innerHTML = '';
+    const totals = payload.totals ? payload.totals.columns : {};
+
+    const cell = (text) => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        return th;
+    };
+
+    row.appendChild(cell('Общо'));
+    for (const name of payload.columns) {
+        // Columns the API could not sum -- place, address, an EKATTE code --
+        // are left blank rather than filled with something meaningless.
+        const value = totals[name];
+        row.appendChild(cell(value === undefined ? '' : nf.format(value)));
+    }
+}
+
+function figure(value, caption) {
+    return `<div class="figure"><b>${value}</b><span>${caption}</span></div>`;
+}
+
+function renderSummary(payload) {
+    const box = document.getElementById('summary');
+    const totals = payload.totals;
+    if (!totals) {
+        box.hidden = true;
+        return;
+    }
+    box.hidden = false;
+
+    const b = totals.ballot;
+    const electorate = totals.columns.eligible_voters;
+    const turnout = (electorate && b.cast)
+        ? `${(100 * b.cast / electorate).toFixed(1)}%` : '—';
+
+    // Read left to right the figures decompose: parties + НПН make up the
+    // valid votes, and those plus the invalid ones make up everything cast.
+    const parts = [
+        figure(nf.format(totals.rows),
+               param('groupby') === 'sid' ? 'секции' : 'населени места'),
+        figure(electorate === undefined ? '—' : nf.format(electorate),
+               'избиратели по списък'),
+        figure(nf.format(b.parties), 'за партии и кандидати'),
+        figure(nf.format(b.npn), 'не подкрепям никого'),
+        figure(nf.format(b.valid), 'действителни (партии + НПН)'),
+        figure(nf.format(b.invalid), 'невалидни'),
+        figure(nf.format(b.cast), `общо гласували (${turnout})`),
+    ];
+
+    // Each figure is derived twice, across the ballot columns and down the
+    // per-row aggregates, so a mismatch means our data disagrees with itself
+    // rather than merely with the official tally.
+    if (!b.agree) {
+        parts.push('<div class="figure warn">⚠ сумите по колони '
+            + `(${nf.format(b.valid)} действителни, ${nf.format(b.cast)} общо) `
+            + 'не съвпадат с данните по редове '
+            + `(${nf.format(b.valid_from_rows)}, ${nf.format(b.cast_from_rows)})</div>`);
+    }
+
+    // Totals cover the filtered rows, so say when that is not everything.
+    if (param('filter')) {
+        parts.push(`<div class="figure scope">сумите са само за `
+            + `${nf.format(totals.rows)} филтрирани реда</div>`);
+    }
+
+    box.innerHTML = parts.join('');
+}
+
 function renderBody(payload) {
     const body = document.getElementById('body');
     body.innerHTML = '';
@@ -189,6 +262,8 @@ async function load() {
 
     status.textContent = `${payload.total_rows} реда`;
     renderHead(payload.columns, payload.sort);
+    renderTotals(payload);
+    renderSummary(payload);
     renderBody(payload);
     renderPager(payload);
     renderCoverage(payload);
