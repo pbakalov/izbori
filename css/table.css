@@ -166,10 +166,47 @@ tbody tr.missing td:first-child::after {
     font-style: italic;
 }
 
+/* One input per column, under the header it filters. */
+thead tr.filter-row th {
+    top: 26px;
+    background: #fafafa;
+    cursor: default;
+    padding: 2px 4px;
+    font-weight: normal;
+    border-bottom: 1px solid var(--rule);
+}
+
+thead tr.filter-row th:hover {
+    color: inherit;
+}
+
+thead tr.filter-row input {
+    width: 100%;
+    min-width: 60px;
+    box-sizing: border-box;
+    padding: 2px 4px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    font: inherit;
+    font-size: 12px;
+    text-align: right;
+}
+
+thead tr.filter-row input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+/* A column with a filter on it should be obvious at a glance. */
+thead tr.filter-row input.active {
+    border-color: var(--accent);
+    background: #eef5fc;
+}
+
 /* Totals live in the sticky head, so they stay visible while scrolling and
    any row can be compared against them without scrolling back. */
 thead tr.totals-row th {
-    top: 28px;
+    top: 52px;
     background: #f1f5f9;
     cursor: default;
     font-variant-numeric: tabular-nums;
@@ -178,4 +215,14 @@ thead tr.totals-row th {
 
 thead tr.totals-row th:hover {
     color: inherit;
+}
+
+/* The key links through to that settlement's or station's history. */
+tbody td:first-child a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+tbody td:first-child a:hover {
+    text-decoration: underline;
 }

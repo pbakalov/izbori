@@ -122,6 +122,21 @@ export async function getTable({ el, mun = null, groupby = 'ekatte',
     return await fetchData(url);
 }
 
+/**
+ * The URL that downloads the current table as CSV: the whole filtered, sorted
+ * set rather than one page. Returned as a link rather than fetched, so the
+ * browser streams it to disk instead of holding it in memory.
+ */
+export function tableCsvUrl({ el, mun = null, groupby = 'ekatte', party = null,
+                              rayon = null, kmetstvo = null, sort = null,
+                              filter = null, geojson = null,
+                              abroad = null } = {}) {
+    return withParams(`${ApiBaseUrl}table`, {
+        el, mun, groupby, party, rayon, kmetstvo,
+        sort, filter, geojson, abroad, format: 'csv',
+    });
+}
+
 /** Every boundary file for one layer, with its id and url. */
 export async function getGeojsonIndex(layer = 'sid') {
     const url = withParams(`${ApiBaseUrl}geojson_index`, { layer });

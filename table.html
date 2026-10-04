@@ -52,6 +52,8 @@
                 <option>250</option>
             </select>
         </label>
+        <button id="clearFilters" type="button" hidden>изчисти филтрите</button>
+        <a id="downloadCsv" href="#" download>⤓ изтегли CSV</a>
         <a id="backToMap" href="#" hidden>← към картата</a>
     </div>
 </header>
@@ -63,6 +65,7 @@
         <table id="results">
             <thead>
                 <tr id="head"></tr>
+                <tr id="filterRow" class="filter-row"></tr>
                 <tr id="totalsRow" class="totals-row"></tr>
             </thead>
             <tbody id="body"></tbody>
