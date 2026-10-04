@@ -1,4 +1,5 @@
-import { getTable, getElectionIds, getMunicipalities, getGeojsonIndex } from './api_utils.js';
+import { getTable, getElectionIds, getMunicipalities, getGeojsonIndex,
+         tableCsvUrl } from './api_utils.js';
 import { renameMap } from './shared.js';
 
 // A standalone results table. Everything it shows comes from one /table call,
@@ -340,6 +341,24 @@ function renderPager(payload) {
     }
 }
 
+/** Point the download at the current view; the server does the work. */
+function renderDownload(payload) {
+    const link = document.getElementById('downloadCsv');
+    link.href = tableCsvUrl({
+        el: param('el'),
+        mun: param('mun'),
+        groupby: param('groupby'),
+        party: param('party'),
+        rayon: param('rayon'),
+        kmetstvo: param('kmetstvo'),
+        sort: payload.sort,
+        filter: payload.filter,
+        geojson: param('geojson'),
+        abroad: param('abroad'),
+    });
+    link.title = `${nf.format(payload.total_rows)} реда, с текущите филтри и подредба`;
+}
+
 function renderCoverage(payload) {
     const box = document.getElementById('coverageBox');
     const stats = payload.geojson;
@@ -406,6 +425,7 @@ async function load() {
     renderBody(payload);
     renderPager(payload);
     renderCoverage(payload);
+    renderDownload(payload);
 }
 
 // ---------------------------------------------------------------------------
