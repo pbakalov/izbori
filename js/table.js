@@ -20,6 +20,25 @@ const LAYER_FOR = { sid: 'sid', ekatte: 'settlement' };
 // election, whole country, grouped into settlements.
 const ALL_MUNICIPALITIES = '';
 
+// Filters use Dash's expression syntax, which the API passes straight to the
+// same helper its own pages use. `on_map` is 0/1 rather than a boolean so it
+// compares like any other column.
+const MISSING_FILTER = '{on_map} eq 0';
+
+// Parties pre-selected when following a key through to the history page.
+// NOTE there are two other copies of a "default parties" list, in sus.js and
+// hist.js, and both are shorter: they omit ПП/ДБ, ПП, ДБ and ПБ. Worth
+// converging on one, ideally by letting /hist pick its own default when a
+// caller passes only an ekatte or a sid.
+const HIST_PARTIES = 'ГЕРБ;ГЕРБ-СДС;ДПС;ДПС-Доган;ДПС-Пеев;ПП/ДБ;ПП;ДБ;ПБ';
+
+/** The history page for one settlement or station. */
+function historyUrl(key) {
+    const name = param('groupby') === 'sid' ? 'sid' : 'ekatte';
+    return `hist.html?${name}=${encodeURIComponent(key)}`
+        + `&party=${encodeURIComponent(HIST_PARTIES)}`;
+}
+
 const state = new URLSearchParams(window.location.search);
 
 function param(name) {
@@ -87,6 +106,114 @@ function renderHead(columns, sort) {
 }
 
 const nf = new Intl.NumberFormat('bg-BG');
+
+// ---------------------------------------------------------------------------
+// the filter row
+//
+// Each input holds what the reader typed for one column. Bare text means
+// "contains"; a leading operator means that comparison. The inputs compose
+// into the expression the API takes, which is Dash's own syntax, so there is
+// one representation and the URL stays shareable.
+// ---------------------------------------------------------------------------
+
+// Word operators, as `backend_paging` spells them, mapped to what a reader
+// types. Order matters: the word forms must be tried before the symbols, or
+// `ge` would never match.
+const OPERATOR_WORDS = { ge: '>=', le: '<=', gt: '>', lt: '<', ne: '!=', eq: '=' };
+
+const CLAUSE_RE = new RegExp(
+    '^\\s*\\{(.+?)\\}\\s*(?:i|s)?'
+    + '(contains|ge|le|gt|lt|ne|eq|>=|<=|!=|>|<|=)'
+    + '\\s*(.*)$');
+
+const TYPED_RE = /^\s*(>=|<=|!=|>|<|=)\s*(.*)$/;
+
+/** Strips the quotes Dash's parser would strip. */
+function unquote(value) {
+    const text = value.trim();
+    const first = text[0];
+    if (text.length > 1 && first === text[text.length - 1]
+        && ['"', "'", '`'].includes(first)) {
+        return text.slice(1, -1);
+    }
+    return text;
+}
+
+/** Quotes a value only when it would otherwise be misread. */
+function quote(value) {
+    return /[\s"'`]|&&/.test(value) ? `"${value.replace(/"/g, '')}"` : value;
+}
+
+/** Expression -> {column: what the reader typed}. */
+function parseFilter(expression) {
+    const typed = {};
+    for (const clause of (expression || '').split(' && ')) {
+        const match = clause.match(CLAUSE_RE);
+        if (!match) continue;
+        const [, column, operator, value] = match;
+        const symbol = OPERATOR_WORDS[operator]
+            || (operator === 'contains' ? '' : operator);
+        typed[column] = symbol
+            ? `${symbol} ${unquote(value)}`.trim()
+            : unquote(value);
+    }
+    return typed;
+}
+
+/** {column: typed text} -> expression, skipping the empty boxes. */
+function buildFilter(typed) {
+    const clauses = [];
+    for (const [column, raw] of Object.entries(typed)) {
+        const text = (raw || '').trim();
+        if (!text) continue;
+        const match = text.match(TYPED_RE);
+        clauses.push(match
+            ? `{${column}} ${match[1]} ${quote(match[2].trim())}`
+            : `{${column}} contains ${quote(text)}`);
+    }
+    return clauses.join(' && ');
+}
+
+function renderFilters(columns) {
+    const row = document.getElementById('filterRow');
+    const typed = parseFilter(param('filter'));
+    row.innerHTML = '';
+
+    const apply = () => {
+        const next = {};
+        for (const input of row.querySelectorAll('input')) {
+            next[input.dataset.column] = input.value;
+        }
+        setParams({ filter: buildFilter(next) || null }, { resetPage: true });
+        load();
+    };
+
+    // The key column is filterable too, so a reader can look up one station.
+    const names = [param('groupby'), ...columns];
+    for (const name of names) {
+        const th = document.createElement('th');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.dataset.column = name;
+        input.value = typed[name] || '';
+        input.placeholder = '';
+        input.title = `филтър по „${columnLabel(name)}“: текст за съвпадение, `
+            + 'или > 500, >= 500, = 0';
+        if (input.value) input.classList.add('active');
+        // On Enter or when leaving the box, not per keystroke: each change is
+        // a request.
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(); });
+        input.addEventListener('blur', () => {
+            if ((typed[name] || '') !== input.value) apply();
+        });
+        th.appendChild(input);
+        row.appendChild(th);
+    }
+
+    const clear = document.getElementById('clearFilters');
+    clear.hidden = !param('filter');
+}
+
 
 function renderTotals(payload) {
     const row = document.getElementById('totalsRow');
@@ -166,12 +293,20 @@ function renderBody(payload) {
 
     payload.data.forEach((values, rowIndex) => {
         const tr = document.createElement('tr');
-        if (onMapAt !== -1 && values[onMapAt] === false) {
+        if (onMapAt !== -1 && !values[onMapAt]) {
             tr.classList.add('missing');
         }
 
+        const value = payload.index[rowIndex];
         const key = document.createElement('td');
-        key.textContent = payload.index[rowIndex];
+        const link = document.createElement('a');
+        link.href = historyUrl(value);
+        link.textContent = value;
+        link.target = '_blank';
+        link.title = param('groupby') === 'sid'
+            ? `история на секция ${value}`
+            : `история на населеното място (ЕКАТТЕ ${value})`;
+        key.appendChild(link);
         tr.appendChild(key);
 
         payload.columns.forEach((name, i) => {
@@ -259,9 +394,13 @@ async function load() {
     if (payload.sort_ignored) {
         setParams({ sort: payload.sort || null });
     }
+    if (payload.filter_ignored) {
+        setParams({ filter: payload.filter || null });
+    }
 
     status.textContent = `${payload.total_rows} реда`;
     renderHead(payload.columns, payload.sort);
+    renderFilters(payload.columns);
     renderTotals(payload);
     renderSummary(payload);
     renderBody(payload);
@@ -414,10 +553,15 @@ function start() {
         load();
     });
 
+    document.getElementById('clearFilters').addEventListener('click', () => {
+        setParams({ filter: null }, { resetPage: true });
+        load();
+    });
+
     const onlyMissing = document.getElementById('onlyMissing');
-    onlyMissing.checked = (param('filter') || '').includes('on_map=false');
+    onlyMissing.checked = (param('filter') || '').includes(MISSING_FILTER);
     onlyMissing.addEventListener('change', () => {
-        setParams({ filter: onlyMissing.checked ? 'on_map=false' : null },
+        setParams({ filter: onlyMissing.checked ? MISSING_FILTER : null },
                   { resetPage: true });
         load();
     });
