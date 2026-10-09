@@ -95,10 +95,11 @@ export async function getUnits(el, mun) {
  * @param {string} groupby - 'ekatte' or 'sid'.
  */
 export async function getMapData({ el, party = null, groupby = 'ekatte',
-                                   mun = null, rayon = null,
-                                   kmetstvo = null } = {}) {
+                                   mun = null, rayon = null, kmetstvo = null,
+                                   abroad = null, totals = null } = {}) {
     const url = withParams(`${ApiBaseUrl}data_for_maps`,
-                           { el, party, groupby, mun, rayon, kmetstvo });
+                           { el, party, groupby, mun, rayon, kmetstvo,
+                             abroad, totals });
 
     return await fetchData(url);
 }
