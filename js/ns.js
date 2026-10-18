@@ -72,6 +72,13 @@ let filteredCount = null;
 // is filtered.
 let filteredKeys = null;
 
+// Ballot columns in the order the API returned them: descending by total
+// votes over the election. Needed because the `totals` block arrives as a
+// JSON object, and the serialiser alphabetises object keys -- so iterating
+// it gives eligible_voters, invalid, npn, ... instead of the vote order the
+// row arrays preserve.
+let ballotOrder = [];
+
 // Mirrors UNSUMMABLE and AGGREGATE_COLUMNS in helper_funcs.py. Whatever is
 // left over is a ballot line: a party, a candidate or npn.
 const NOT_SUMMABLE = new Set([
@@ -249,6 +256,7 @@ function loadCSV(electionId) {
                 totals: true,
             });
             electionTotals = apiResponse ? apiResponse.totals : null;
+            ballotOrder = apiResponse ? apiResponse.columns : [];
            
             // some massage to get back the papaParse structure; saves us some refactoring
             const transformedData = transformApiResponseToArray(apiResponse);
@@ -840,12 +848,19 @@ function generateTableHtmlForRowById(targetId, explicitRow) {
 
     html += '<tbody><tr>';
     const selectedPartiesArray = selectedParties.split(';');
-    for (let key in targetRow) {
+    // Follow the API's column order rather than the row's own keys, so the
+    // totals table is sorted like every other one.
+    const keys = ballotOrder.length
+        ? ballotOrder.filter(key => key in targetRow)
+        : Object.keys(targetRow);
+    for (const key of keys) {
         if (![
                 "total",
                 "total_valid",
                 "id",
                 "eligible_voters",
+                "eligible_voters_added",
+                "eligible_voters_total",
                 "activity",
                 'region',
                 'region_name',
@@ -853,6 +868,7 @@ function generateTableHtmlForRowById(targetId, explicitRow) {
                 'municipality_name',
                 'n_stations',
                 'partyGroup',
+                'on_map',
             ].includes(key)) {
             const partyName = renameMap[key] || key; // invalid, npn
             const nVotes = targetRow[key];
