@@ -28,6 +28,7 @@
                 <div id="partyOptionsList" class="options-list"></div>
                 <input type="hidden" id="partySelectedValue">
             </div>
+            <div id="layerInfo" class="layer-info"></div>
             <br>
             <label>
             <b>Оцвети според:</b>
@@ -43,6 +44,18 @@
               </label>
             </form>
             <br><b>Филтри</b><br>
+
+            <label>Посока на промяната:</label>
+            <form id="deltaDirection">
+              <label>
+                <input type="radio" name="direction" value="growth" checked>
+                ръст
+              </label>
+              <label>
+                <input type="radio" name="direction" value="decline">
+                спад
+              </label>
+            </form>
 
             <label for="minDeltaVotes">Промяна от поне:</label><br>
             <input type="range" id="minDeltaVotes" min="0" max="559" value=0 step="1">
