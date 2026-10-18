@@ -1,5 +1,6 @@
 import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
-import { getPlaceHist, getDeltas, getGroupedData, getElectionIds, getParties } from './api_utils.js';
+import { getPlaceHist, getDeltas, getMapData, getElectionIds, getParties,
+         getGeojsonDescriptor } from './api_utils.js';
 import { GHP_ROOT, isMobile, CSVCombobox, renameMap} from './shared.js';
 
 let csvData;
@@ -22,6 +23,174 @@ let minDeltaVotes = 0;
 let minSupport = 0;
 let minSupportVotes = 0;
 
+// Which way the change filters look. The sliders carry the magnitude, this
+// carries the sign, so 'спад' with minDelta 0.1 means delta <= -0.1 rather
+// than |delta| >= 0.1. Replaces the old two-sided test, which could not be
+// expressed in the table's filter syntax and mixed gains with losses.
+let deltaDirection = 'growth';
+
+// Totals for the whole election, including stations abroad, so the figures
+// match the official tally rather than only what the map can draw.
+let electionTotals = null;
+
+// The resolved boundary descriptor and the keys it covers, for the layer
+// caption and for counting the rows it cannot draw.
+let boundary = null;
+let featureKeys = new Set();
+
+// This map always draws the settlement layer, so its id is a safe fallback
+// when the descriptor could not be fetched. Without one, an `{on_map}` filter
+// names a column the table does not have, gets dropped by design, and the
+// link quietly shows every row as though nothing were filtered.
+const SETTLEMENT_LAYER = 'settlements_simplified1pct';
+const SETTLEMENT_URL = '../assets/data/geo/settlements_simplified1pct.json';
+
+// Settlement codes are five digits. Anything outside that is synthetic: the
+// codes CIK assigns to polling places abroad, or -1 where an older file has
+// none. Verified across all 13 loaded elections with no misclassification.
+const isAbroad = (ekatte) => Number(ekatte) < 0 || Number(ekatte) > 99999;
+
+/**
+ * A settlement's key in the boundary file: its EKATTE, zero-padded to five.
+ *
+ * Returns null for a place abroad, which has no settlement code and so can
+ * never match a polygon. That matters: the previous `('00000' + id).slice(-5)`
+ * *truncated* longer codes, and once stations abroad were included that made
+ * 35 of them collide with real villages -- ekatte 162503 became 62503, which
+ * is с. Реселец. A polling place abroad could colour a village in Pleven.
+ */
+function settlementKey(ekatte) {
+    if (isAbroad(ekatte)) return null;
+    return String(ekatte).padStart(5, '0');
+}
+
+// How many settlements the sliders are currently letting through, or null
+// when no slider is set and everything with data is drawn.
+let filteredCount = null;
+
+// The settlement codes the sliders are letting through, or null when nothing
+// is filtered.
+let filteredKeys = null;
+
+// Mirrors UNSUMMABLE and AGGREGATE_COLUMNS in helper_funcs.py. Whatever is
+// left over is a ballot line: a party, a candidate or npn.
+const NOT_SUMMABLE = new Set([
+    'id', 'station_type', 'country_name', 'region_name', 'ekatte', 'place',
+    'address', 'municipality_name', 'kmetstvo', 'kmetstvo_name', 'nuts4',
+]);
+const AGGREGATE_COLUMNS = new Set([
+    'total', 'total_valid', 'invalid', 'partyGroup', 'n_stations', 'on_map',
+    'eligible_voters', 'eligible_voters_added', 'eligible_voters_total',
+]);
+
+/**
+ * Totals over an arbitrary set of rows, in the same shape the API's `totals`
+ * block uses, so the infobox can render either without caring which it got.
+ *
+ * This duplicates compute_totals() in helper_funcs.py, which is not ideal.
+ * The API cannot do it: the sliders filter on `delta` and `delta_votes`,
+ * which are not columns in the map payload, so there is no filter expression
+ * that would reproduce the selection server-side. Once the delta columns land
+ * in /table this function should go, and the map should ask for the filtered
+ * totals the same way it asks for the unfiltered ones.
+ */
+function sumRows(rows) {
+    const columns = {};
+    for (const row of rows) {
+        for (const [key, value] of Object.entries(row)) {
+            if (NOT_SUMMABLE.has(key)) continue;
+            const number = Number(value);
+            if (!Number.isFinite(number)) continue;
+            columns[key] = (columns[key] || 0) + number;
+        }
+    }
+
+    const npn = columns.npn || 0;
+    const parties = Object.keys(columns)
+        .filter(key => key !== 'npn' && !AGGREGATE_COLUMNS.has(key))
+        .reduce((sum, key) => sum + columns[key], 0);
+    const invalid = columns.invalid || 0;
+
+    return {
+        rows: rows.length,
+        columns,
+        ballot: {
+            parties,
+            npn,
+            valid: parties + npn,
+            invalid,
+            cast: parties + npn + invalid,
+            valid_from_rows: columns.total_valid,
+            cast_from_rows: columns.total,
+            agree: Math.abs(parties + npn - (columns.total_valid || 0)) < 0.5
+                && Math.abs(parties + npn + invalid - (columns.total || 0)) < 0.5,
+        },
+    };
+}
+
+/** The rows the sliders are currently showing, or all of them. */
+function shownRows() {
+    if (filteredKeys === null) return csvData;
+    return csvData.filter(row => filteredKeys.has(settlementKey(row.id)));
+}
+
+// Heroku's router rejects a request line over 4096 bytes, and the history
+// page passes its ekatte list straight on to /data. Measured against
+// production: 756 codes in a 4 093-character URL went through, 762 in 4 129
+// did not.
+const MAX_REQUEST_LINE = 4000;   // 4096 less room for "GET ... HTTP/1.1"
+
+/**
+ * How many characters of ekatte list will fit, given what else /data has to
+ * carry. Computed rather than fixed, because a long party selection is
+ * expensive: percent-encoded Cyrillic runs six characters per letter.
+ */
+function ekatteBudget() {
+    const overhead = '/api/data?party=&ekatte='.length
+        + encodeURIComponent(selectedParties).length;
+    return MAX_REQUEST_LINE - overhead;
+}
+
+/**
+ * The electoral history of the filtered settlements, summed. /data takes a
+ * ';'-separated ekatte list and adds them up, so this is the history of
+ * "the places that declined by half", which is the interesting question.
+ *
+ * Returns null when the list would not fit in a URL the API will accept.
+ */
+function historyLink() {
+    if (filteredKeys === null) return null;
+
+    // Leading zeros are redundant -- the API parses these with int() -- and
+    // every character counts against the budget.
+    const codes = [...filteredKeys]
+        .map(key => String(Number(key)))
+        .sort((a, b) => Number(a) - Number(b))
+        .join(';');
+
+    if (codes.length > ekatteBudget()) {
+        return `<i>историята на тези ${nf(filteredKeys.size)} места не се`
+            + ` побира в един адрес; стесни филтъра</i>`;
+    }
+
+    const url = `../hist.html?ekatte=${codes}`
+        + `&party=${encodeURIComponent(selectedParties)}`;
+    return `<a href="${url}" target="_blank"`
+        + ` title="обобщена изборна история на филтрираните места">`
+        + `виж историята на тези ${nf(filteredKeys.size)} места</a>`;
+}
+
+/** A one-line description of the active filters, for the totals box. */
+function filterSummary() {
+    const parts = [];
+    const direction = deltaDirection === 'decline' ? 'спад' : 'ръст';
+    if (minDelta > 0) parts.push(`${direction} ≥ ${(100 * minDelta).toFixed(0)}%`);
+    if (minDeltaVotes > 0) parts.push(`${direction} ≥ ${nf(minDeltaVotes)} гласа`);
+    if (minSupport > 0) parts.push(`подкрепа ≥ ${(100 * minSupport).toFixed(0)}%`);
+    if (minSupportVotes > 0) parts.push(`подкрепа ≥ ${nf(minSupportVotes)} гласа`);
+    return parts.join(', ');
+}
+
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     const electionId = event.target.value;
     loadCSV(electionId).then(() => updateElection());
@@ -30,6 +199,8 @@ document.getElementById("csvDropdown").addEventListener("change", function(event
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
 document.getElementById('hideInfo').addEventListener('click', closeInfoBox);
 document.getElementById('minDelta').addEventListener('change', updateMinDelta);
+document.getElementById('deltaDirection')
+    .addEventListener('change', updateDeltaDirection);
 document.getElementById('minDeltaVotes').addEventListener('change', updateMinDeltaVotes);
 document.getElementById('minSupport').addEventListener('change', updateMinSupport);
 document.getElementById('minSupportVotes').addEventListener('change', updateMinSupportVotes);
@@ -67,7 +238,17 @@ loadGeoJSON().then(() => populateElectionDropdown()).then(initializeCombobox).th
 function loadCSV(electionId) {
     return new Promise(async (resolve, reject) => {
         try {
-            const apiResponse = await getGroupedData(electionId, selectedParties);
+            // /data_for_maps returns the same payload /grouped_data did, plus
+            // `totals` and `abroad`. Abroad is on so the tally is the national
+            // one; those settlements simply have no polygon to draw.
+            const apiResponse = await getMapData({
+                el: electionId,
+                party: selectedParties === 'total' ? null : selectedParties,
+                groupby: 'ekatte',
+                abroad: true,
+                totals: true,
+            });
+            electionTotals = apiResponse ? apiResponse.totals : null;
            
             // some massage to get back the papaParse structure; saves us some refactoring
             const transformedData = transformApiResponseToArray(apiResponse);
@@ -110,18 +291,31 @@ function transformApiResponseToArray(apiResponse) {
     return rows 
 }
 
-function loadGeoJSON() {
-  return new Promise((resolve, reject) => {
-    fetch("../assets/data/geo/settlements_simplified1pct.json")
-      .then((response) => response.json())
-      .then((data) => {
-        geojsonData = data;
-        resolve();
-      })
-      .catch((error) => {
-        reject(error);
-      });
-  });
+/**
+ * The settlement boundaries, resolved through the API rather than hardcoded,
+ * so the caption can name the file and a second layer can be added without
+ * touching this.
+ */
+async function loadGeoJSON(el) {
+  const descriptor = await getGeojsonDescriptor({
+      el: el || null, layer: 'settlement' });
+  // Always end up with a usable descriptor, so the caption and the table
+  // links do not depend on the endpoint being reachable.
+  boundary = descriptor && descriptor.url ? descriptor : {
+      id: SETTLEMENT_LAYER,
+      url: SETTLEMENT_URL,
+      layer: 'settlement',
+      join: 'ncode',
+      exact: true,
+  };
+  const url = boundary.url;
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.statusText}`);
+  geojsonData = await response.json();
+  featureKeys = new Set(
+      geojsonData.features.map(f => String(f.properties.ncode)));
+  renderLayerInfo();
 }
 
 function populateElectionDropdown() {
@@ -168,7 +362,7 @@ async function matchData(parties, el) {
   const deltas = await getDeltas(parties, el);
   geojsonData.features.forEach((feature) => {
 
-    const match = csvData.find((row) => ('00000' + row.id).slice(-5) === feature.properties.ncode); 
+    const match = csvData.find((row) => settlementKey(row.id) === feature.properties.ncode);
     if (match) {
       feature.properties['delta'] = deltas['delta'][feature.properties.ncode.replace(/^0+/, '')];
       feature.properties['delta_votes'] = deltas['delta_votes'][feature.properties.ncode.replace(/^0+/, '')];
@@ -341,6 +535,13 @@ function initializeMap() {
   minDeltaVotes =  parseInt(urlParams.get('minDeltaVotes') || 0);
   minSupportVotes =  parseInt(urlParams.get('minSupportVotes') || 0);
 
+  if (urlParams.get('deltaDir') === 'decline') {
+      deltaDirection = 'decline';
+      const radio = document.querySelector(
+          '#deltaDirection input[value="decline"]');
+      if (radio) radio.checked = true;
+  }
+
   setSlider(urlParams, 'minDelta');
   setSlider(urlParams, 'minDeltaVotes');
   setSlider(urlParams, 'minSupport');
@@ -381,6 +582,7 @@ const updateUrlWithMapState = () => {
     newUrl += `&minDeltaVotes=${minDeltaVotes}`;
     newUrl += `&minSupport=${minSupport}`;
     newUrl += `&minSupportVotes=${minSupportVotes}`;
+    newUrl += `&deltaDir=${deltaDirection}`;
 
     window.history.replaceState(null, '', newUrl);
 };
@@ -435,6 +637,133 @@ function updateMapType(event) {
     updateUrlWithMapState();
 }
 
+/**
+ * Name the boundary file under the controls. The settlement layer has one
+ * file today, so this is mostly anticipation: once there is more than one,
+ * the caption says which is in use without reading the network tab.
+ */
+function renderLayerInfo() {
+    const box = document.getElementById('layerInfo');
+    if (!box) return;
+    if (!boundary || !boundary.url) {
+        box.innerHTML = '';
+        return;
+    }
+    const file = boundary.url.split('/').pop();
+    let html = `Слой: <a href="${boundary.url}" target="_blank" `
+        + `title="виж GeoJSON файла">${file}</a>`;
+    if (boundary.exact === false) {
+        html += `<br><span class="inherited">няма собствен слой; `
+            + `границите са от ${boundary.source_date}</span>`;
+    }
+    box.innerHTML = html;
+}
+
+const numberFormat = new Intl.NumberFormat('bg-BG');
+const nf = (v) => (v === null || v === undefined || isNaN(v))
+    ? 'н.д.' : numberFormat.format(Math.round(v));
+const pctOf = (part, whole) => whole ? `${(100 * part / whole).toFixed(1)}%` : 'н.д.';
+
+/** A count linking to that subset of rows in the table page. */
+function tableLink(count, filter, description) {
+    const params = new URLSearchParams({
+        el: document.getElementById('csvDropdown').value,
+        groupby: 'ekatte',
+        abroad: 'true',
+    });
+    const layer = (boundary && boundary.id) || SETTLEMENT_LAYER;
+    params.set('geojson', layer);
+    if (filter) params.set('filter', filter);
+    return `<a href="../table.html?${params}" target="_blank"`
+        + ` title="виж ${description} в таблица">${nf(count)}</a>`;
+}
+
+/** Rows the boundary file cannot draw, split into domestic and abroad. */
+function rowsWithoutPolygon() {
+    const home = { count: 0, votes: 0 };
+    const away = { count: 0, votes: 0 };
+    for (const row of csvData) {
+        const key = settlementKey(row.id);
+        if (key !== null && featureKeys.has(key)) continue;
+        const bucket = isAbroad(row.id) ? away : home;
+        bucket.count += 1;
+        bucket.votes += row.total || 0;
+    }
+    return { home, away };
+}
+
+/**
+ * The whole election's figures, shown when nothing is hovered. The headline
+ * tally is the national one, abroad included, so it can be checked against
+ * the official result; what the map cannot draw is named separately below.
+ */
+function electionTextbox() {
+    if (!electionTotals) return 'Посочете населено место.';
+
+    // With the sliders set, the figures describe what is on the map, not the
+    // whole election, and the box says so. Without them the API's own totals
+    // are used, so nothing is recomputed in the common case.
+    const filtered = filteredKeys !== null;
+    const scope = filtered ? sumRows(shownRows()) : electionTotals;
+    const columns = scope.columns;
+    const ballot = scope.ballot;
+    const turnout = selectedParties === 'total';
+
+    let textbox = '';
+    if (filtered) {
+        textbox += `<i>Филтър: ${filterSummary()}</i><br>`;
+        textbox += `<b>${nf(scope.rows)}</b> от ${nf(electionTotals.rows)} `
+            + `населени места<br>`;
+        const history = historyLink();
+        if (history) textbox += `${history}<br>`;
+    }
+    if (turnout) {
+        // The counts themselves are in the breakdown below, so only the rate
+        // belongs up here.
+        textbox += `Активност: ${pctOf(ballot.cast, columns.eligible_voters)}<br>`;
+    } else {
+        const votes = columns.partyGroup;
+        textbox += `${selectedParties.split(';').map(p => renameMap[p] || p).join(';')}`;
+        textbox += `<br>гласове: ${nf(votes)} `;
+        textbox += `(${pctOf(votes, ballot.valid)} от действителните)<br>`;
+    }
+
+    textbox += generateTableHtmlForRowById(null, columns);
+    textbox += `За партии и кандидати: ${nf(ballot.parties)}<br>`;
+    textbox += `Не подкрепям никого: ${nf(ballot.npn)}<br>`;
+    textbox += `Действителни (партии + НПН): ${nf(ballot.valid)}<br>`;
+    textbox += `Невалидни: ${nf(ballot.invalid)}<br>`;
+    textbox += `Общо гласували: ${nf(ballot.cast)}<br>`;
+    textbox += `Избиратели по списък: ${nf(columns.eligible_voters)}<br>`;
+
+    // What the map is not drawing, and why, in two separate categories: the
+    // abroad one will shrink if polygons for those are ever added.
+    const missing = rowsWithoutPolygon();
+    const drawn = electionTotals.rows - missing.home.count - missing.away.count;
+
+    textbox += '<br>';
+    textbox += `Общо: ${tableLink(electionTotals.rows, null, 'всички населени места')} населени места<br>`;
+    textbox += `На картата: ${tableLink(drawn, '{on_map} eq 1', 'тези с полигон')}`;
+    // Only when a slider is narrowing it further. Counting the drawn layers
+    // would be wrong here: the boundary file holds 5 255 polygons, including
+    // ~1 091 settlements with no polling station in this election, so that
+    // number is not comparable with the others.
+    if (filteredCount !== null) {
+        textbox += `, показани сега ${nf(filteredCount)}`;
+    }
+    textbox += '<br>';
+    if (missing.home.count) {
+        textbox += `Без полигон в страната: `
+            + `${tableLink(missing.home.count, '{on_map} eq 0', 'тези без полигон')}`
+            + ` (${nf(missing.home.votes)} гласували)<br>`;
+    }
+    if (missing.away.count) {
+        textbox += `В чужбина: ${nf(missing.away.count)} места `
+            + `(${nf(missing.away.votes)} гласували)`;
+    }
+    return textbox;
+}
+
 function generateTextbox(props, parties) {
 
     var textbox = '';
@@ -452,7 +781,7 @@ function generateTextbox(props, parties) {
     }
 
     if (props) {
-        const targetRow  = csvData.find((row) => ('00000' + row.id).slice(-5) === props.ncode); 
+        const targetRow  = csvData.find((row) => settlementKey(row.id) === props.ncode);
 
         var table = generateTableHtmlForRowById(props.ncode);
 
@@ -483,15 +812,21 @@ function generateTextbox(props, parties) {
         textbox += `Гласували/избиратели по списък: ${isNaN(props['total']) ? 'н.д.' : (props['total']/props['eligible_voters']).toFixed(2)}<br>`
         textbox += `Брой секции: ${targetRow ? targetRow['n_stations'] : 0}<br>`
     } else {
-        textbox += 'Посочете населено место.'
+        textbox += electionTextbox();
     };
     
     return textbox;
 }
 
-function generateTableHtmlForRowById(targetId) {
-    
-    const targetRow  = csvData.find((row) => ('00000' + row.id).slice(-5) === targetId); 
+/**
+ * The ballot as a table. Either for one settlement, by its code, or for an
+ * explicit row -- which is how the election totals reuse it, since the totals
+ * block is itself a column-to-value object.
+ */
+function generateTableHtmlForRowById(targetId, explicitRow) {
+
+    const targetRow = explicitRow
+        || csvData.find((row) => settlementKey(row.id) === targetId);
 
     if (!targetRow) return '';
 
@@ -626,6 +961,11 @@ function createGeoJsonLayer(geoData, selectedEkatte=null) {
   return geoLayer;
 }
 
+function updateDeltaDirection(event) {
+    deltaDirection = event.target.value;
+    applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes);
+}
+
 function updateMinDelta(event) {
     let display = document.getElementById("minDeltaDisplay");
     minDelta = event.target.value;
@@ -658,12 +998,23 @@ function applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes) {
     let selectedEkatte = [];
 
     if ((minDelta>0) || (minDeltaVotes>0) || (minSupport>0) || (minSupportVotes>0)) {
+        // Support is a magnitude and never negative, so it stays a plain
+        // comparison; only the change filters take a direction.
+        const growth = deltaDirection !== 'decline';
+        // A slider at zero means no constraint, so moving only a *support*
+        // slider does not silently also demand a direction of change. The
+        // old two-sided test had the same property for a different reason:
+        // |x| >= 0 is true for anything finite.
+        const passesChange = (value, threshold) => threshold <= 0
+            ? true
+            : (growth ? value >= threshold : value <= -threshold);
+
         geojsonData.features.forEach((feature) => {
             if (
-              (Math.abs(feature.properties['delta']) >= (minDelta)) && 
-              (Math.abs(feature.properties['delta_votes'])>=minDeltaVotes) &&
-              (Math.abs(feature.properties['value_prop'])>=minSupport) &&
-              (Math.abs(feature.properties['value'])>=minSupportVotes)
+              passesChange(feature.properties['delta'], minDelta) &&
+              passesChange(feature.properties['delta_votes'], minDeltaVotes) &&
+              (feature.properties['value_prop']>=minSupport) &&
+              (feature.properties['value']>=minSupportVotes)
             ) {
               selectedEkatte.push(feature.properties.ncode);
             }
@@ -672,10 +1023,23 @@ function applyFilter(minDelta, minDeltaVotes, minSupport, minSupportVotes) {
         selectedEkatte = null; // show all
     }
 
+    // For the totals box: how many settlements the sliders are showing. null
+    // when nothing is filtered, so the box can stay quiet about it.
+    filteredCount = selectedEkatte === null ? null : selectedEkatte.length;
+    filteredKeys = selectedEkatte === null ? null : new Set(selectedEkatte);
+
     map.removeLayer(geojsonLayer);
 
     geojsonLayer = createGeoJsonLayer(geojsonData, selectedEkatte)
     geojsonLayer.addTo(map);
+
+    // The resting infobox reports the filtered totals, so it has to be
+    // redrawn when the filter moves. Guarded because applyFilter runs once
+    // during startup, before initializeMap has defined update().
+    if (typeof info.update === 'function') {
+        info.update(undefined, selectedParties);
+    }
+
     updateUrlWithMapState();
 }
 

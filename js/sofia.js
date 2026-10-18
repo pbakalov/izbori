@@ -523,6 +523,12 @@ function tableLink(count, filter, description) {
         mun: MUNICIPALITY,
         groupby: 'sid',
     });
+    // An `{on_map}` filter needs a layer to compare against. Without one the
+    // table would drop the clause and show every row as though nothing were
+    // filtered, so show a plain number rather than a link that lies. Unlike
+    // the ns map there is no safe fallback: the layer varies by election.
+    if (filter && !boundaryId) return nf(count);
+
     if (boundaryId) params.set('geojson', boundaryId);
     if (selectedRayon) params.set('rayon', selectedRayon);
     if (filter) params.set('filter', filter);
