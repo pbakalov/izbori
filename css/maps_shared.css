@@ -120,9 +120,21 @@ body, html {
   .info {
     margin-top: 60px !important;
     margin-left: 50px !important;
-    overflow: scroll;
     max-height: 55vh;
+    /* A column so only the content scrolls and the toggle stays pinned to the
+       bottom of the box. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
+
+  /* min-height: 0 so a flex item is actually allowed to shrink and scroll. */
+  .info > .info-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
 }
 
 
@@ -246,4 +258,27 @@ body, html {
 
 .layer-info .inherited {
     color: #b2182b;
+}
+
+/* Expands the resting infobox on a phone, where the full breakdown would
+   otherwise cover the map. */
+.details-toggle {
+    display: none;
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px;
+    background: #f1f5f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .details-toggle {
+        display: block;
+        /* Outside the scroll area, so it never scrolls out of reach. */
+        flex: 0 0 auto;
+    }
 }

@@ -56,3 +56,26 @@
 .layer-info .inherited {
     color: #b2182b;
 }
+
+/* Expands the resting infobox on a phone. Defined in maps_shared.css too;
+   repeated here because sofia.css is loaded after it. */
+.details-toggle {
+    display: none;
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px;
+    background: #f1f5f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .details-toggle {
+        display: block;
+        /* Outside the scroll area, so it never scrolls out of reach. */
+        flex: 0 0 auto;
+    }
+}

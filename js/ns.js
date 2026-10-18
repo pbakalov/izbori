@@ -72,6 +72,19 @@ let filteredCount = null;
 // is filtered.
 let filteredKeys = null;
 
+// Ballot columns in the order the API returned them: descending by total
+// votes over the election. Needed because the `totals` block arrives as a
+// JSON object, and the serialiser alphabetises object keys -- so iterating
+// it gives eligible_voters, invalid, npn, ... instead of the vote order the
+// row arrays preserve.
+let ballotOrder = [];
+
+// On a phone the resting box would otherwise cover the map: a 27-row ballot
+// table plus the breakdown and the counts. So it starts collapsed to its
+// headline and expands on demand. Collapsing rather than closing means
+// nothing becomes unreachable and no extra control is needed to get it back.
+let detailsOpen = false;
+
 // Mirrors UNSUMMABLE and AGGREGATE_COLUMNS in helper_funcs.py. Whatever is
 // left over is a ballot line: a party, a candidate or npn.
 const NOT_SUMMABLE = new Set([
@@ -249,6 +262,7 @@ function loadCSV(electionId) {
                 totals: true,
             });
             electionTotals = apiResponse ? apiResponse.totals : null;
+            ballotOrder = apiResponse ? apiResponse.columns : [];
            
             // some massage to get back the papaParse structure; saves us some refactoring
             const transformedData = transformApiResponseToArray(apiResponse);
@@ -463,26 +477,27 @@ function initializeMap() {
   	var textbox = generateTextbox(props, parties);
 
     this._div.innerHTML = '';
-    var closeButton;
-    if (props && isMobile()) {
-        closeButton = L.DomUtil.create('button', 'close-btn', this._div);
-        closeButton.innerHTML = 'x';
-        closeButton.style.float = 'right';
-    };
 
     let contentDiv = L.DomUtil.create("div", "info-content", this._div);
     contentDiv.innerHTML = textbox;
 
-    if (props && isMobile()) {
-        L.DomEvent.on(closeButton, 'click', () => {
-            this.close();
+    // A sibling of the scrollable content rather than part of it, so it stays
+    // pinned to the bottom of the box instead of needing to be scrolled to.
+    // The same control serves the hovered box, which used to have a close
+    // button of its own: collapsing it leaves the headline on screen, which
+    // closing did not, so there is no reason to keep two layouts.
+    if (isMobile() && (props || electionTotals)) {
+        const toggle = L.DomUtil.create('button', 'details-toggle', this._div);
+        toggle.type = 'button';
+        toggle.textContent = detailsOpen
+            ? 'скрий подробностите ▴'
+            : 'подробности ▾';
+        L.DomEvent.on(toggle, 'click', (event) => {
+            L.DomEvent.stopPropagation(event);
+            detailsOpen = !detailsOpen;
+            info.update(props, parties);
         });
-    };
-  };
-
-  info.close = function() {
-      info.update(undefined, selectedParties);
-      // TODO reset the style of the clicked feature 
+    }
   };
 
   info.addTo(map);
@@ -728,6 +743,8 @@ function electionTextbox() {
         textbox += `(${pctOf(votes, ballot.valid)} от действителните)<br>`;
     }
 
+    if (isMobile() && !detailsOpen) return textbox;
+
     textbox += generateTableHtmlForRowById(null, columns);
     textbox += `За партии и кандидати: ${nf(ballot.parties)}<br>`;
     textbox += `Не подкрепям никого: ${nf(ballot.npn)}<br>`;
@@ -805,6 +822,8 @@ function generateTextbox(props, parties) {
         if (isMobile()) {
             const cleanEkatte = props.ncode.replace(/^0+/, '');
             textbox += `<a href="../hist.html?ekatte=${cleanEkatte}&party=${selectedParties}" target="_blank">виж история</a>`;
+            if (!detailsOpen) return textbox;
+            textbox += '<br>';
         }
         textbox += table + '<br>'
         textbox += 'Общо гласували (вкл. невалидни): ' +  props['total']  + '<br>'
@@ -840,12 +859,19 @@ function generateTableHtmlForRowById(targetId, explicitRow) {
 
     html += '<tbody><tr>';
     const selectedPartiesArray = selectedParties.split(';');
-    for (let key in targetRow) {
+    // Follow the API's column order rather than the row's own keys, so the
+    // totals table is sorted like every other one.
+    const keys = ballotOrder.length
+        ? ballotOrder.filter(key => key in targetRow)
+        : Object.keys(targetRow);
+    for (const key of keys) {
         if (![
                 "total",
                 "total_valid",
                 "id",
                 "eligible_voters",
+                "eligible_voters_added",
+                "eligible_voters_total",
                 "activity",
                 'region',
                 'region_name',
@@ -853,6 +879,7 @@ function generateTableHtmlForRowById(targetId, explicitRow) {
                 'municipality_name',
                 'n_stations',
                 'partyGroup',
+                'on_map',
             ].includes(key)) {
             const partyName = renameMap[key] || key; // invalid, npn
             const nVotes = targetRow[key];
