@@ -79,6 +79,12 @@ let filteredKeys = null;
 // row arrays preserve.
 let ballotOrder = [];
 
+// On a phone the resting box would otherwise cover the map: a 27-row ballot
+// table plus the breakdown and the counts. So it starts collapsed to its
+// headline and expands on demand. Collapsing rather than closing means
+// nothing becomes unreachable and no extra control is needed to get it back.
+let detailsOpen = false;
+
 // Mirrors UNSUMMABLE and AGGREGATE_COLUMNS in helper_funcs.py. Whatever is
 // left over is a ballot line: a party, a candidate or npn.
 const NOT_SUMMABLE = new Set([
@@ -471,26 +477,27 @@ function initializeMap() {
   	var textbox = generateTextbox(props, parties);
 
     this._div.innerHTML = '';
-    var closeButton;
-    if (props && isMobile()) {
-        closeButton = L.DomUtil.create('button', 'close-btn', this._div);
-        closeButton.innerHTML = 'x';
-        closeButton.style.float = 'right';
-    };
 
     let contentDiv = L.DomUtil.create("div", "info-content", this._div);
     contentDiv.innerHTML = textbox;
 
-    if (props && isMobile()) {
-        L.DomEvent.on(closeButton, 'click', () => {
-            this.close();
+    // A sibling of the scrollable content rather than part of it, so it stays
+    // pinned to the bottom of the box instead of needing to be scrolled to.
+    // The same control serves the hovered box, which used to have a close
+    // button of its own: collapsing it leaves the headline on screen, which
+    // closing did not, so there is no reason to keep two layouts.
+    if (isMobile() && (props || electionTotals)) {
+        const toggle = L.DomUtil.create('button', 'details-toggle', this._div);
+        toggle.type = 'button';
+        toggle.textContent = detailsOpen
+            ? 'скрий подробностите ▴'
+            : 'подробности ▾';
+        L.DomEvent.on(toggle, 'click', (event) => {
+            L.DomEvent.stopPropagation(event);
+            detailsOpen = !detailsOpen;
+            info.update(props, parties);
         });
-    };
-  };
-
-  info.close = function() {
-      info.update(undefined, selectedParties);
-      // TODO reset the style of the clicked feature 
+    }
   };
 
   info.addTo(map);
@@ -736,6 +743,8 @@ function electionTextbox() {
         textbox += `(${pctOf(votes, ballot.valid)} от действителните)<br>`;
     }
 
+    if (isMobile() && !detailsOpen) return textbox;
+
     textbox += generateTableHtmlForRowById(null, columns);
     textbox += `За партии и кандидати: ${nf(ballot.parties)}<br>`;
     textbox += `Не подкрепям никого: ${nf(ballot.npn)}<br>`;
@@ -813,6 +822,8 @@ function generateTextbox(props, parties) {
         if (isMobile()) {
             const cleanEkatte = props.ncode.replace(/^0+/, '');
             textbox += `<a href="../hist.html?ekatte=${cleanEkatte}&party=${selectedParties}" target="_blank">виж история</a>`;
+            if (!detailsOpen) return textbox;
+            textbox += '<br>';
         }
         textbox += table + '<br>'
         textbox += 'Общо гласували (вкл. невалидни): ' +  props['total']  + '<br>'

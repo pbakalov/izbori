@@ -41,6 +41,11 @@ let rowsByKey = new Map();
 // votes over the current scope, so it follows the район selection.
 let ballotOrder = [];
 
+// On a phone the resting box would otherwise cover the map. It starts
+// collapsed to its headline and expands on demand; collapsing rather than
+// closing means nothing becomes unreachable.
+let detailsOpen = false;
+
 // The scope the figures cover. `selectedRayon` is null for the whole
 // municipality and will be set by the район dropdown; everything that reads
 // the scope goes through scopeLabel() and the loader passes it to the API, so
@@ -560,6 +565,8 @@ function scopeTextbox() {
         textbox += `(${pct(votes, ballot.valid)} от действителните)<br>`;
     }
 
+    if (isMobile() && !detailsOpen) return textbox;
+
     textbox += ballotTable(columns);
     textbox += `Общо гласували (вкл. невалидни): ${nf(ballot.cast)}<br>`;
     textbox += `Валидни (вкл. НПН): ${nf(ballot.valid)}<br>`;
@@ -621,6 +628,8 @@ function generateTextbox(props) {
         textbox += `(${isNaN(pct) ? 'н.д.' : pct.toFixed(1)}%)<br>`;
     }
 
+    if (isMobile() && !detailsOpen) return textbox;
+
     textbox += ballotTable(row);
     textbox += `Общо гласували (вкл. невалидни): ${row.total}<br>`;
     textbox += `Валидни (вкл. НПН): ${row.total_valid}<br>`;
@@ -653,16 +662,25 @@ function initializeMap() {
 
     info.update = function (props) {
         this._div.innerHTML = '';
-        let closeButton;
-        if (props && isMobile()) {
-            closeButton = L.DomUtil.create('button', 'close-btn', this._div);
-            closeButton.innerHTML = 'x';
-            closeButton.style.float = 'right';
-        }
         const content = L.DomUtil.create('div', 'info-content', this._div);
         content.innerHTML = generateTextbox(props);
-        if (closeButton) {
-            L.DomEvent.on(closeButton, 'click', () => info.update(undefined));
+
+        // A sibling of the scrollable content rather than part of it, so it
+        // stays pinned to the bottom instead of needing to be scrolled to.
+        // The same control serves the hovered box, which used to have a close
+        // button of its own: collapsing leaves the headline on screen, which
+        // closing did not, so there is no reason to keep two layouts.
+        if (isMobile() && (props || scopeTotals)) {
+            const toggle = L.DomUtil.create('button', 'details-toggle', this._div);
+            toggle.type = 'button';
+            toggle.textContent = detailsOpen
+                ? 'скрий подробностите ▴'
+                : 'подробности ▾';
+            L.DomEvent.on(toggle, 'click', (event) => {
+                L.DomEvent.stopPropagation(event);
+                detailsOpen = !detailsOpen;
+                info.update(props);
+            });
         }
     };
 
