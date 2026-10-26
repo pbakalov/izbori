@@ -862,7 +862,7 @@ function generateTableHtmlForRowById(targetId, explicitRow) {
     html += '<thead><tr>';
     html += '<th>Партия</th>';
     html += '<th>Гласове</th>';
-    html += '<th>Пропорция</th>';
+    html += '<th>Дял</th>';
     html += '</tr></thead>';
 
     html += '<tbody><tr>';

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Изборни резултати по секции и населени места</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="../css/maps_shared.css">
+</head>
+
+<body>
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="dropdown-container">
+            <button id="menuToggle" class="menu-toggle">
+                <span class="menu-icon">☰</span>
+                <span class="menu-text">Меню</span>
+            </button>
+            <div class="menu-content">
+            <label for="layerDropdown"><b>Карта по:</b></label>
+            <select id="layerDropdown"></select>
+            <br>
+            <select id="csvDropdown"></select>
+            <br>
+            <div id='partySelection' class="combobox-wrapper">
+                <div>
+                    <input type="text" id="partyCombobox" class="combobox-input" placeholder="избери партии">
+                    <div class="multi-select-tags" id="partySelectedTags"></div>
+                </div>
+                <div id="partyOptionsList" class="options-list"></div>
+                <input type="hidden" id="partySelectedValue">
+            </div>
+            <div id="layerInfo" class="layer-info"></div>
+            <br>
+            <label>
+            <b>Оцвети според:</b>
+            <form>
+              <label>
+                <input type="radio" name="choice" value="result" checked>
+                Резултат
+              </label>
+              <br>
+              <label>
+                <input type="radio" name="choice" value="delta">
+                Промяна
+              </label>
+            </form>
+            <br><b>Филтри</b><br>
+
+            <label>Посока на промяната:</label>
+            <form id="deltaDirection">
+              <label>
+                <input type="radio" name="direction" value="growth" checked>
+                ръст
+              </label>
+              <label>
+                <input type="radio" name="direction" value="decline">
+                спад
+              </label>
+            </form>
+
+            <label for="minDeltaVotes">Промяна от поне:</label><br>
+            <input type="range" id="minDeltaVotes" min="0" max="559" value=0 step="1">
+            <span id="minDeltaVotesDisplay">0</span> гласа<br>
+
+            <label for="minDelta">Промяна от поне:</label><br>
+            <input type="range" id="minDelta" min="0" max="7" value=0 step="0.1">
+            <span id="minDeltaDisplay">0</span> %<br>
+
+            <label for="minSupportVotes">Подкрепа над:</label><br>
+            <input type="range" id="minSupportVotes" min="0" max="1000" value=0 step="5">
+            <span id="minSupportVotesDisplay">0</span> гласа<br>
+
+            <label for="minSupport">Подкрепа над:</label><br>
+            <input type="range" id="minSupport" min="0" max="1" value=0 step="0.05">
+            <span id="minSupportDisplay">0</span> %
+
+            </label>
+            <br>
+            </div>
+        </div>
+    </div>
+    <div id="infoBox" class="info-box" style="display:none;">
+        Изборните данни са от <a href=https://results.cik.bg>ЦИК</a>.<br>
+        Данни по секции и инструменти за анализ:<a href=https://bg-izbori.herokuapp.com/>bg-izbori.herokuapp.com</a>.<br>
+        Границите на населените места са от <a href=https://www.nsi.bg/nrnm/spatial-data>НСИ</a>.<br>
+        Границите на секциите са приблизителни и са съставени от <a href=https://twitter.com/petar_baka>@petar_baka</a>.<br>
+        За коментари и намерени грешки: <a href=https://twitter.com/petar_baka>@petar_baka</a>.<br>
+        <button id="hideInfo">Затвори</button>
+    </div>
+    <script type='module' src="../js/maps.js"></script>
+</body>
+</html>
+
