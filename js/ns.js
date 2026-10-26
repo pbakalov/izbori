@@ -679,12 +679,19 @@ const nf = (v) => (v === null || v === undefined || isNaN(v))
     ? 'н.д.' : numberFormat.format(Math.round(v));
 const pctOf = (part, whole) => whole ? `${(100 * part / whole).toFixed(1)}%` : 'н.д.';
 
-/** A count linking to that subset of rows in the table page. */
-function tableLink(count, filter, description) {
+/**
+ * A count linking to that subset of rows in the table page.
+ *
+ * `abroad` has to be set per link, not once for the map: the domestic
+ * no-polygon count is 16, but `{on_map} eq 0` with abroad included matches
+ * 409, since no place abroad has a polygon either. Excluding them at the
+ * source is what makes the link agree with the number next to it.
+ */
+function tableLink(count, filter, description, { abroad = true } = {}) {
     const params = new URLSearchParams({
         el: document.getElementById('csvDropdown').value,
         groupby: 'ekatte',
-        abroad: 'true',
+        abroad: abroad ? 'true' : 'false',
     });
     const layer = (boundary && boundary.id) || SETTLEMENT_LAYER;
     params.set('geojson', layer);
@@ -771,7 +778,8 @@ function electionTextbox() {
     textbox += '<br>';
     if (missing.home.count) {
         textbox += `Без полигон в страната: `
-            + `${tableLink(missing.home.count, '{on_map} eq 0', 'тези без полигон')}`
+            + `${tableLink(missing.home.count, '{on_map} eq 0',
+                           'тези без полигон в страната', { abroad: false })}`
             + ` (${nf(missing.home.votes)} гласували)<br>`;
     }
     if (missing.away.count) {
