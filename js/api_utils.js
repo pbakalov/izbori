@@ -43,8 +43,14 @@ export async function getPlaceHist(ekatte, party) {
     return data;
 }
 
-export async function getDeltas(party, el) {
-    const url=`${ApiBaseUrl}/delta?party=${party}&el=${el}`;
+/**
+ * Change against the previous comparable election.
+ * @param {string} [groupby] - 'ekatte' (the endpoint's default) or 'sid'.
+ *     Left out, the request is byte-for-byte what it was before.
+ */
+export async function getDeltas(party, el, groupby = null) {
+    let url=`${ApiBaseUrl}/delta?party=${party}&el=${el}`;
+    if (groupby) url += `&groupby=${groupby}`;
 
     const data = await fetchData(url);
     return data;

@@ -14,8 +14,13 @@ import { renameMap } from './shared.js';
 
 const DEFAULTS = { groupby: 'ekatte', page: '0', page_size: '50' };
 
-// Which boundary layer each grouping is drawn on, for the `Слой` dropdown.
-const LAYER_FOR = { sid: 'sid', ekatte: 'settlement' };
+// Which boundary layers each grouping can be drawn on, for the `Слой`
+// dropdown. Stations have two: the per-date Sofia files under `sid`, and the
+// nationwide `station` layer. Listing only one of them silently discarded a
+// `geojson` the URL asked for, which dropped the `on_map` column and with it
+// any filter naming it -- so a link to "the stations without a polygon"
+// opened showing every station.
+const LAYER_FOR = { sid: ['sid', 'station'], ekatte: ['settlement'] };
 
 // The default view when the URL says nothing: the most recent national
 // election, whole country, grouped into settlements.
@@ -483,17 +488,18 @@ async function fillMunicipalities() {
     }
 }
 
-/** Boundary files for the layer the current grouping is drawn on. */
+/** Boundary files for the layers the current grouping can be drawn on. */
 async function fillGeojson() {
     const select = document.getElementById('geojsonSelect');
-    const layer = LAYER_FOR[param('groupby')];
-    const index = await getGeojsonIndex(layer);
-    const files = index ? index.files : {};
+    const layers = LAYER_FOR[param('groupby')] || [];
+    const indexes = await Promise.all(layers.map(layer => getGeojsonIndex(layer)));
 
     // Several dates can share one file, so list each file once.
     const seen = new Map();
-    for (const entry of Object.values(files)) {
-        if (!seen.has(entry.id)) seen.set(entry.id, entry.id);
+    for (const index of indexes) {
+        for (const entry of Object.values(index ? index.files : {})) {
+            if (!seen.has(entry.id)) seen.set(entry.id, entry.id);
+        }
     }
     const chosen = fillSelect(select, [...seen], param('geojson'), 'без');
     if (chosen !== (param('geojson') || '')) {
