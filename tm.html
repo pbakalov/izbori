@@ -9,9 +9,14 @@
 
 <body>
     <div class="container">
-        <h1>Преходи на гласоподаватели <span id="periodLabel"></span></h1>
+        <h1>Преходи на гласоподаватели</h1>
 
         <div class="controls">
+            <label for="pairSelect">Избори:</label>
+            <select id="pairSelect" class="pair-select"></select>
+        </div>
+
+        <div id="methodControls" class="controls">
             <label>Метод:</label>
             <div id="tmSelect" class="model-picker"></div>
         </div>
@@ -21,7 +26,7 @@
         <div id="chart"></div>
 
         <div id="contact">
-            И трите анализа са на ниво община и не включват секциите в чужбина. За коментари и намерени грешки: <a href="https://twitter.com/petar_baka">@petar_baka</a>. QP анализ: Ивайло Парчев.
+            <span id="note"></span> За коментари и намерени грешки: <a href="https://twitter.com/petar_baka">@petar_baka</a>.
         </div>
     </div>
 
