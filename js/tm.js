@@ -3,9 +3,10 @@ import { isMobile } from './shared.js';
 const tmDir = 'assets/data/tm';
 
 const csvFilenames = [
-    'votes_tm_2024_2026.csv',
-    'votes_tm_2024_2026_qp.csv',
-    'votes_tm_2024_2026_ei.csv',
+    'votes_tm_2026-04-19ns_to_2026-10-25pr.csv',
+    'votes_tm_2024-10-27ns_to_2026-04-19ns.csv',
+    'votes_tm_2024-10-27ns_to_2026-04-19ns_qp.csv',
+    'votes_tm_2024-10-27ns_to_2026-04-19ns_ei.csv',
 ];
 
 // Categories that aren't parties - shown in grayscale and translated to Bulgarian
@@ -20,6 +21,15 @@ const structuralCategories = {
 
 const methodNames = { '': 'lphom', 'qp': 'QP', 'ei' : 'EI' };
 
+// Election type codes used in filenames (e.g. 2026-10-25pr)
+const electionTypes = { 'ns': 'НС', 'pr': 'ПР', 'pr2': 'ПР II тур' };
+
+// Footer note per election pair; falls back to defaultNote
+const pairNotes = {
+    '2024-10-27ns_to_2026-04-19ns': 'И трите анализа са на ниво община и не включват секциите в чужбина. QP анализ: Ивайло Парчев.',
+};
+const defaultNote = 'Анализът е на ниво община и не включва секциите в чужбина.';
+
 // Links below this many votes are dropped as noise (e.g. -0.0 / 0.0 entries)
 const minLinkValue = 1;
 
@@ -31,24 +41,38 @@ let currentDimLinkColor = [];
 let currentHighlightLinkColor = [];
 let listenersAttached = false;
 
+function electionLabel(date, type) {
+    return `${date.replaceAll('-', '.')} ${electionTypes[type] ?? type.toUpperCase()}`;
+}
+
+// votes_tm_<date><type>_to_<date><type>[_<method>].csv
 function parseFilename(filename) {
-    const m = filename.match(/^votes_tm_(\d{4})_(\d{4})(?:_(.+))?\.csv$/);
+    const m = filename.match(/^votes_tm_(\d{4}-\d{2}-\d{2})([a-z0-9]+)_to_(\d{4}-\d{2}-\d{2})([a-z0-9]+)(?:_(.+))?\.csv$/);
     if (!m) return null;
-    const suffix = m[3] || '';
+    const suffix = m[5] || '';
     const method = methodNames[suffix] ?? suffix.toUpperCase();
+    const from = electionLabel(m[1], m[2]);
+    const to = electionLabel(m[3], m[4]);
     return {
         filename,
         path: `${tmDir}/${filename}`,
-        year1: m[1],
-        year2: m[2],
-        period: `${m[1]} → ${m[2]}`,
+        pair: `${m[1]}${m[2]}_to_${m[3]}${m[4]}`,
+        from,
+        to,
+        period: `${from} → ${to}`,
         method,
         key: method.toLowerCase(),
     };
 }
 
-function listCsvFiles() {
-    return csvFilenames.map(parseFilename).filter(Boolean);
+// Group files by election pair, newest pair first (order of first appearance in csvFilenames)
+function listPairs() {
+    const pairs = new Map();
+    csvFilenames.map(parseFilename).filter(Boolean).forEach(file => {
+        if (!pairs.has(file.pair)) pairs.set(file.pair, { key: file.pair, period: file.period, files: [] });
+        pairs.get(file.pair).files.push(file);
+    });
+    return [...pairs.values()];
 }
 
 function parseCsv(text) {
@@ -114,7 +138,7 @@ function topFlowsCustomData(nodeLabels, linkSource, linkTarget, linkValue, topN 
 async function renderChart(file) {
     currentFile = file;
     document.getElementById('loadingMsg').style.display = '';
-    document.getElementById('periodLabel').textContent = file.period;
+    document.getElementById('note').textContent = pairNotes[file.pair] ?? defaultNote;
 
     const response = await fetch(file.path);
     const csvText = await response.text();
@@ -172,8 +196,8 @@ async function renderChart(file) {
     const layout = {
         font: { size: 12 },
         annotations: [
-            { text: file.year1, x: 0, y: 1.05, xref: 'paper', yref: 'paper', showarrow: false, font: { size: 14 } },
-            { text: file.year2, x: 1, y: 1.05, xref: 'paper', yref: 'paper', showarrow: false, font: { size: 14 } },
+            { text: file.from, xanchor: 'left', x: 0, y: 1.05, xref: 'paper', yref: 'paper', showarrow: false, font: { size: 14 } },
+            { text: file.to, xanchor: 'right', x: 1, y: 1.05, xref: 'paper', yref: 'paper', showarrow: false, font: { size: 14 } },
         ],
     };
 
@@ -223,25 +247,64 @@ async function renderChart(file) {
 let currentFile = null;
 
 async function initPage() {
-    const files = listCsvFiles();
+    const pairs = listPairs();
+    const pairSelect = document.getElementById('pairSelect');
     const picker = document.getElementById('tmSelect');
+    const methodControls = document.getElementById('methodControls');
 
     const params = new URLSearchParams(window.location.search);
+    const pairParam = params.get('pair');
     const modelParam = params.get('model')?.toLowerCase();
-    const initialIdx = Math.max(0, files.findIndex(f => f.key === (modelParam ?? '')));
 
-    files.forEach((file, i) => {
-        const btn = document.createElement('button');
-        btn.textContent = file.method;
-        btn.className = 'model-btn' + (i === initialIdx ? ' active' : '');
-        btn.addEventListener('click', () => {
-            picker.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            history.replaceState(null, '', `?model=${file.key}`);
-            renderChart(file);
+    // Pick the pair from ?pair=; otherwise the newest pair that has the requested model
+    // (keeps old ?model=qp links working); otherwise the newest pair.
+    let pair = pairs.find(p => p.key === pairParam)
+        ?? (modelParam && pairs.find(p => p.files.some(f => f.key === modelParam)))
+        ?? pairs[0];
+
+    let file = pair.files.find(f => f.key === modelParam) ?? pair.files[0];
+
+    function updateUrl() {
+        const q = new URLSearchParams({ pair: pair.key });
+        if (pair.files.length > 1) q.set('model', file.key);
+        history.replaceState(null, '', `?${q}`);
+    }
+
+    function buildMethodPicker() {
+        picker.innerHTML = '';
+        methodControls.style.display = pair.files.length > 1 ? '' : 'none';
+        pair.files.forEach(f => {
+            const btn = document.createElement('button');
+            btn.textContent = f.method;
+            btn.className = 'model-btn' + (f === file ? ' active' : '');
+            btn.addEventListener('click', () => {
+                picker.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                file = f;
+                updateUrl();
+                renderChart(file);
+            });
+            picker.appendChild(btn);
         });
-        picker.appendChild(btn);
+    }
+
+    pairs.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.period;
+        pairSelect.appendChild(opt);
     });
+    pairSelect.value = pair.key;
+    pairSelect.addEventListener('change', () => {
+        pair = pairs.find(p => p.key === pairSelect.value);
+        // Keep the same method if the new pair has it
+        file = pair.files.find(f => f.key === file.key) ?? pair.files[0];
+        buildMethodPicker();
+        updateUrl();
+        renderChart(file);
+    });
+
+    buildMethodPicker();
 
     // Re-render on orientation change / resize so layout dimensions are recalculated
     let resizeTimer;
@@ -250,7 +313,7 @@ async function initPage() {
         resizeTimer = setTimeout(() => { if (currentFile) renderChart(currentFile); }, 200);
     });
 
-    await renderChart(files[initialIdx]);
+    await renderChart(file);
 }
 
 initPage();

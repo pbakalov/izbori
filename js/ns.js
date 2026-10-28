@@ -14,7 +14,7 @@ let geojsonLayer;
 var info = L.control();
 var legend = createLegend(mapType);
 
-let selectedParties = 'Йотова';
+let selectedParties = 'Йотова;ПБ';
 let currentHighlight = null;
 let partyCombobox = null;
 

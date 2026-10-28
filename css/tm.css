@@ -49,6 +49,16 @@ h1 {
     white-space: nowrap;
 }
 
+.pair-select {
+    padding: 8px 12px;
+    font-size: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    color: #333;
+    max-width: 100%;
+}
+
 .model-picker {
     display: flex;
     gap: 0;

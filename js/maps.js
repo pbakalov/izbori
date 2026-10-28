@@ -12,7 +12,7 @@ let geojsonLayer;
 var info = L.control();
 var legend = createLegend(mapType);
 
-let selectedParties = 'ГЕРБ-СДС;ГЕРБ'
+let selectedParties = 'Йотова;ПБ';
 let currentHighlight = null;
 let partyCombobox = null;
 
