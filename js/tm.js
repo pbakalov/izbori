@@ -4,6 +4,8 @@ const tmDir = 'assets/data/tm';
 
 const csvFilenames = [
     'votes_tm_2026-04-19ns_to_2026-10-25pr.csv',
+    'votes_tm_2026-04-19ns_to_2026-10-25pr_ei.csv',
+    'votes_tm_2026-04-19ns_to_2026-10-25pr_qp.csv',
     'votes_tm_2024-10-27ns_to_2026-04-19ns.csv',
     'votes_tm_2024-10-27ns_to_2026-04-19ns_qp.csv',
     'votes_tm_2024-10-27ns_to_2026-04-19ns_ei.csv',
@@ -27,6 +29,7 @@ const electionTypes = { 'ns': 'НС', 'pr': 'ПР', 'pr2': 'ПР II тур' };
 // Footer note per election pair; falls back to defaultNote
 const pairNotes = {
     '2024-10-27ns_to_2026-04-19ns': 'И трите анализа са на ниво община и не включват секциите в чужбина. QP анализ: Ивайло Парчев.',
+    '2026-04-19ns_to_2026-10-25pr': 'И трите анализа са на ниво община и не включват секциите в чужбина. QP анализ: Ивайло Парчев.',
 };
 const defaultNote = 'Анализът е на ниво община и не включва секциите в чужбина.';
 
@@ -137,6 +140,7 @@ function topFlowsCustomData(nodeLabels, linkSource, linkTarget, linkValue, topN 
 
 async function renderChart(file) {
     currentFile = file;
+    console.log(file.pair);
     document.getElementById('loadingMsg').style.display = '';
     document.getElementById('note').textContent = pairNotes[file.pair] ?? defaultNote;
 
