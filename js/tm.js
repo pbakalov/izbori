@@ -3,9 +3,16 @@ import { isMobile } from './shared.js';
 const tmDir = 'assets/data/tm';
 
 const csvFilenames = [
+    'votes_tm_2026-10-25pr_to_2026-11-01pr.csv',
+    'votes_tm_2026-10-25pr_to_2026-11-01pr_qp.csv',
+
+    'votes_tm_2026-04-19ns_to_2026-11-01pr.csv',
+    'votes_tm_2026-04-19ns_to_2026-11-01pr_qp.csv',
+
     'votes_tm_2026-04-19ns_to_2026-10-25pr.csv',
     'votes_tm_2026-04-19ns_to_2026-10-25pr_ei.csv',
     'votes_tm_2026-04-19ns_to_2026-10-25pr_qp.csv',
+
     'votes_tm_2024-10-27ns_to_2026-04-19ns.csv',
     'votes_tm_2024-10-27ns_to_2026-04-19ns_qp.csv',
     'votes_tm_2024-10-27ns_to_2026-04-19ns_ei.csv',
