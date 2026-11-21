@@ -18,6 +18,16 @@ let selectedParties = 'Йотова;ПБ';
 let currentHighlight = null;
 let partyCombobox = null;
 
+// The election the deltas are measured against. The empty string means 'let
+// the API choose', which is what the map did before this was selectable, so
+// it stays the default and the request stays byte-for-byte the old one.
+const AUTO_REF = '';
+let selectedRef = AUTO_REF;
+
+// el id -> display label, filled from whatever the API returned for the two
+// dropdowns. The reference election is shown by label, not by raw id.
+const electionLabels = {};
+
 let minDelta = 0;
 let minDeltaVotes = 0;
 let minSupport = 0;
@@ -206,7 +216,17 @@ function filterSummary() {
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     const electionId = event.target.value;
-    loadCSV(electionId).then(() => updateElection());
+    // The reference list depends on the target election, and the previous
+    // choice may no longer be in it, so it is rebuilt before the redraw.
+    Promise.all([loadCSV(electionId), populateRefDropdown(electionId)])
+        .then(() => updateElection());
+});
+
+document.getElementById("refDropdown").addEventListener("change", function(event) {
+    selectedRef = event.target.value;
+    // Only the deltas change; the target election's own results are already
+    // loaded, so there is nothing to re-fetch from /data_for_maps.
+    updateElection();
 });
 
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
@@ -341,6 +361,7 @@ function populateElectionDropdown() {
             dropdown.innerHTML = '';
             
             // options from API
+            Object.assign(electionLabels, electionData);
             for (const [electionId, label] of Object.entries(electionData)) {
                 const option = document.createElement('option');
                 option.value = electionId;
@@ -361,6 +382,46 @@ function populateElectionDropdown() {
     });
 }
 
+/**
+ * Rebuilds the reference-election list for `el`.
+ *
+ * The API decides what is comparable (same family, loaded, not `el` itself),
+ * so the map does not carry its own copy of those rules.
+ *
+ * @param {string} [wanted] - a reference to select if it is still on offer;
+ *     anything else, including a now-invalid one, falls back to automatic.
+ */
+async function populateRefDropdown(el, wanted = undefined) {
+    const dropdown = document.getElementById('refDropdown');
+    const keep = wanted !== undefined ? wanted : selectedRef;
+
+    let options = {};
+    try {
+        options = await getElectionIds({ compatibleWith: el }) || {};
+    } catch (error) {
+        // A missing list only costs the user the choice; the automatic
+        // reference still works, so the map stays usable.
+        console.error('Could not load reference elections:', error);
+    }
+    Object.assign(electionLabels, options);
+
+    dropdown.innerHTML = '';
+    const auto = document.createElement('option');
+    auto.value = AUTO_REF;
+    auto.textContent = 'авт. (предишни избори)';
+    dropdown.appendChild(auto);
+
+    for (const [electionId, label] of Object.entries(options)) {
+        const option = document.createElement('option');
+        option.value = electionId;
+        option.textContent = label;
+        dropdown.appendChild(option);
+    }
+
+    selectedRef = keep in options ? keep : AUTO_REF;
+    dropdown.value = selectedRef;
+}
+
 function loadMarkerData(file) {
     return fetch(file)
     .then(response => {
@@ -373,7 +434,7 @@ function loadMarkerData(file) {
 }
 
 async function matchData(parties, el) { 
-  const deltas = await getDeltas(parties, el);
+  const deltas = await getDeltas(parties, el, null, selectedRef || null);
   geojsonData.features.forEach((feature) => {
 
     const match = csvData.find((row) => settlementKey(row.id) === feature.properties.ncode);
@@ -542,8 +603,9 @@ function initializeMap() {
 
   const party = urlParams.get('party');
   const el = urlParams.get('el');
+  const elRef = urlParams.get('el_ref');
 
-  set_el_and_party(el, party);
+  set_el_and_party(el, party, elRef);
   
   minDelta =  parseFloat(urlParams.get('minDelta') || 0.);
   minSupport =  parseFloat(urlParams.get('minSupport') || 0.);
@@ -567,9 +629,15 @@ function initializeMap() {
   map.on('moveend zoomend', updateUrlWithMapState);
 }
 
-function set_el_and_party(el, party) {
+function set_el_and_party(el, party, elRef = null) {
     const csvDropdown = document.getElementById('csvDropdown');
     const options = Array.from(csvDropdown.options).map(option => option.value);
+
+    // An el_ref from the url is only honoured for the election actually being
+    // shown: populateRefDropdown drops it if the API does not offer it, so a
+    // stale or hand-edited link degrades to the automatic reference rather
+    // than to an error from /delta.
+    const target = (el && options.includes(el)) ? el : csvDropdown.value;
 
     if (el && options.includes(el)) { // el specified in url is a valid option
         csvDropdown.value = el; //does not trigger event listeners
@@ -577,12 +645,11 @@ function set_el_and_party(el, party) {
             selectedParties = party;
             partyCombobox.setOptions(party.split(';'));
         }
-        loadCSV(el).then(() => {
-            updateElection();
-        });
-    } else { // fall back to default 
-        loadCSV(csvDropdown.value).then(() => updateElection());
     }
+
+    Promise.all([loadCSV(target),
+                 populateRefDropdown(target, elRef || AUTO_REF)])
+        .then(() => updateElection());
 }
 
 const updateUrlWithMapState = () => {
@@ -593,6 +660,9 @@ const updateUrlWithMapState = () => {
     const party = selectedParties;
 
     let newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
+    // Only when chosen, so a url with the automatic reference is unchanged
+    // from what this map produced before the reference was selectable.
+    if (selectedRef) newUrl += `&el_ref=${selectedRef}`;
     newUrl += `&minDelta=${minDelta}`;
     newUrl += `&minDeltaVotes=${minDeltaVotes}`;
     newUrl += `&minSupport=${minSupport}`;
@@ -678,6 +748,12 @@ const numberFormat = new Intl.NumberFormat('bg-BG');
 const nf = (v) => (v === null || v === undefined || isNaN(v))
     ? 'н.д.' : numberFormat.format(Math.round(v));
 const pctOf = (part, whole) => whole ? `${(100 * part / whole).toFixed(1)}%` : 'н.д.';
+
+// A delta as a percentage. /delta sends the non-finite ones as the strings
+// "Infinity"/"-Infinity"/"NaN", and a place can get one if the
+// reference election is zero there. 
+const pct = (v) => Number.isFinite(Number(v)) && v !== null && v !== ''
+    ? `${(100 * Number(v)).toFixed(1)}%` : 'н.д.';
 
 /**
  * A count linking to that subset of rows in the table page.
@@ -824,8 +900,9 @@ function generateTextbox(props, parties) {
             textbox += 'Избиратели по списък: ' +  props['eligible_voters'] + '<br>'
             textbox += `Активност (%): ${isNaN(props['total']) ? 'н.д.' : (100*props['total']/props['eligible_voters']).toFixed(1)}<br>`
         }
-        textbox += `<b>Промяна</b> спрямо ${props['el_ref']}:<br>`
-        textbox += `${isNaN(props['delta']) ? 'н.д.' : (100*props['delta']).toFixed(1)}% `
+        const refLabel = electionLabels[props['el_ref']] || props['el_ref'];
+        textbox += `<b>Промяна</b> спрямо ${refLabel}:<br>`
+        textbox += `${pct(props['delta'])} `
         textbox += `(${isNaN(props['delta_votes']) ? 'н.д.' : props['delta_votes']} гласа)<br>`
         if (isMobile()) {
             const cleanEkatte = props.ncode.replace(/^0+/, '');

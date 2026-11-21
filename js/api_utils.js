@@ -1,5 +1,5 @@
 const ApiBaseUrl = 'https://bg-izbori.herokuapp.com/api/';
-// const ApiBaseUrl = 'http://127.0.0.1:8050/api/'; // for local dev 
+// const ApiBaseUrl = 'http://127.0.0.1:8050/api/'; // for local dev
 
 export async function getSidsByDate(ekatte) {
     const url=`${ApiBaseUrl}/sids?ekatte=${ekatte}`;
@@ -44,13 +44,16 @@ export async function getPlaceHist(ekatte, party) {
 }
 
 /**
- * Change against the previous comparable election.
+ * Change against a comparable election.
  * @param {string} [groupby] - 'ekatte' (the endpoint's default) or 'sid'.
  *     Left out, the request is byte-for-byte what it was before.
+ * @param {string} [elRef] - the reference election. Left out, the API picks
+ *     the previous one of the same family, which is what it always did.
  */
-export async function getDeltas(party, el, groupby = null) {
+export async function getDeltas(party, el, groupby = null, elRef = null) {
     let url=`${ApiBaseUrl}/delta?party=${party}&el=${el}`;
     if (groupby) url += `&groupby=${groupby}`;
+    if (elRef) url += `&el_ref=${elRef}`;
 
     const data = await fetchData(url);
     return data;
@@ -70,12 +73,17 @@ export async function getGroupedData(el, party = null) {
  * Election ids and their labels.
  * Called with no arguments it returns what it always did: the loaded national
  * assembly and European Parliament elections.
- * @param {string} [elType] - 'all', a family ('ns', 'ep', 'mes') or an exact
- *   type ('os', 'ko'), semicolon-separated for several.
+ * @param {string} [elType] - 'all', a family ('ns', 'mes') or an exact type
+ *   ('ep', 'pr', 'os', 'ko'), semicolon-separated for several. NOTE the 'ns'
+ *   family includes the European and presidential elections.
  * @param {string} [mun] - keep only elections with data for this municipality.
+ * @param {string} [compatibleWith] - keep only elections usable as a /delta
+ *   reference for this one: same family, loaded, and not the election itself.
  */
-export async function getElectionIds({ elType = null, mun = null } = {}) {
-    const url = withParams(`${ApiBaseUrl}election_ids`, { el_type: elType, mun });
+export async function getElectionIds({ elType = null, mun = null,
+                                       compatibleWith = null } = {}) {
+    const url = withParams(`${ApiBaseUrl}election_ids`,
+                           { el_type: elType, mun, compatible_with: compatibleWith });
 
     const data = await fetchData(url);
     return data;
