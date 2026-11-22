@@ -49,11 +49,16 @@ export async function getPlaceHist(ekatte, party) {
  *     Left out, the request is byte-for-byte what it was before.
  * @param {string} [elRef] - the reference election. Left out, the API picks
  *     the previous one of the same family, which is what it always did.
+ * @param {Object} [scope] - {nuts4, oblast} to narrow both elections to the
+ *     same territory. Codes, not names: see getMunicipalities({detail: true}).
  */
-export async function getDeltas(party, el, groupby = null, elRef = null) {
+export async function getDeltas(party, el, groupby = null, elRef = null,
+                                { nuts4 = null, oblast = null } = {}) {
     let url=`${ApiBaseUrl}/delta?party=${party}&el=${el}`;
     if (groupby) url += `&groupby=${groupby}`;
     if (elRef) url += `&el_ref=${elRef}`;
+    if (nuts4) url += `&nuts4=${nuts4}`;
+    if (oblast) url += `&oblast=${oblast}`;
 
     const data = await fetchData(url);
     return data;
@@ -90,8 +95,15 @@ export async function getElectionIds({ elType = null, mun = null,
 }
 
 /** Municipalities with data in a given election. */
-export async function getMunicipalities(el) {
-    const url = withParams(`${ApiBaseUrl}municipalities`, { el });
+/**
+ * The municipalities an election has stations in.
+ * @param {boolean} [detail] - true returns {name, nuts4, oblast, oblast_code}
+ *     objects instead of bare names. Needed to tell the two Бяла apart, and
+ *     to build an oblast/municipality pair of dropdowns from one request.
+ *     National elections only.
+ */
+export async function getMunicipalities(el, { detail = null } = {}) {
+    const url = withParams(`${ApiBaseUrl}municipalities`, { el, detail });
 
     const data = await fetchData(url);
     return data ? data.municipalities : null;
@@ -110,10 +122,11 @@ export async function getUnits(el, mun) {
  */
 export async function getMapData({ el, party = null, groupby = 'ekatte',
                                    mun = null, rayon = null, kmetstvo = null,
-                                   abroad = null, totals = null } = {}) {
+                                   abroad = null, totals = null,
+                                   nuts4 = null, oblast = null } = {}) {
     const url = withParams(`${ApiBaseUrl}data_for_maps`,
                            { el, party, groupby, mun, rayon, kmetstvo,
-                             abroad, totals });
+                             abroad, totals, nuts4, oblast });
 
     return await fetchData(url);
 }
@@ -128,9 +141,10 @@ export async function getTable({ el, mun = null, groupby = 'ekatte',
                                  party = null, rayon = null, kmetstvo = null,
                                  page = 0, pageSize = 50, sort = null,
                                  filter = null, geojson = null,
-                                 abroad = null } = {}) {
+                                 abroad = null, nuts4 = null,
+                                 oblast = null } = {}) {
     const url = withParams(`${ApiBaseUrl}table`, {
-        el, mun, groupby, party, rayon, kmetstvo,
+        el, mun, groupby, party, rayon, kmetstvo, nuts4, oblast,
         page, page_size: pageSize, sort, filter, geojson, abroad,
     });
 
@@ -145,9 +159,10 @@ export async function getTable({ el, mun = null, groupby = 'ekatte',
 export function tableCsvUrl({ el, mun = null, groupby = 'ekatte', party = null,
                               rayon = null, kmetstvo = null, sort = null,
                               filter = null, geojson = null,
-                              abroad = null } = {}) {
+                              abroad = null, nuts4 = null,
+                              oblast = null } = {}) {
     return withParams(`${ApiBaseUrl}table`, {
-        el, mun, groupby, party, rayon, kmetstvo,
+        el, mun, groupby, party, rayon, kmetstvo, nuts4, oblast,
         sort, filter, geojson, abroad, format: 'csv',
     });
 }
