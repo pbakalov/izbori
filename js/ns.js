@@ -1,6 +1,6 @@
 import { getColor, style, highlightFeature, createLegend, getFeatureColor, JsonToTable } from './maps_shared.js';
 import { getPlaceHist, getDeltas, getMapData, getElectionIds, getParties,
-         getGeojsonDescriptor } from './api_utils.js';
+         getGeojsonDescriptor, getMunicipalities } from './api_utils.js';
 import { GHP_ROOT, isMobile, CSVCombobox, renameMap} from './shared.js';
 
 let csvData;
@@ -27,6 +27,52 @@ let selectedRef = AUTO_REF;
 // el id -> display label, filled from whatever the API returned for the two
 // dropdowns. The reference election is shown by label, not by raw id.
 const electionLabels = {};
+
+// The administrative scope, as the codes the API filters on: an oblast is the
+// three-letter nuts4 prefix ('VAR'), a municipality the whole code ('VAR05').
+// Codes rather than names because two municipalities are both called Бяла,
+// and because an official name can differ between elections -- the April file
+// says Добричка where the presidential one says Добрич-селска. Empty means
+// the whole country, which is what the map showed before this existed.
+const ALL = '';
+let selectedOblast = ALL;
+let selectedMun = ALL;
+
+// [{name, nuts4, oblast, oblast_code}] for the selected election.
+let municipalities = [];
+
+/** What /data_for_maps, /delta and /table are narrowed by. */
+function scopeParams() {
+    // The municipality is the narrower of the two, so it wins outright; the
+    // API would otherwise intersect them and a mismatched pair would return
+    // nothing.
+    if (selectedMun) return { nuts4: selectedMun, oblast: null };
+    if (selectedOblast) return { nuts4: null, oblast: selectedOblast };
+    return { nuts4: null, oblast: null };
+}
+
+/** True while the map is showing less than the whole country. */
+const scoped = () => Boolean(selectedMun || selectedOblast);
+
+/**
+ * Whether a polygon belongs to the current scope.
+ *
+ * When there are active filters, the API does not return places without 
+ * polling stations, therefore we do client-side filtering (otherwise we get holes in the map).
+ * 
+ * At some point we could update the API to return the EKATTE without a polling station
+ * so it's all server-side.
+ */
+function inScope(feature) {
+    const props = feature.properties;
+    if (selectedMun) return props.obsht_code === selectedMun; // NUTS4, e.g. BLG03
+    if (selectedOblast) return props.oblast_code === selectedOblast; // BLG, SOF, SFO (the NUTS4 prefix without the digits) 
+    return true;
+}
+
+// The whole-country view, used on startup and when a scope is cleared.
+const DEFAULT_CENTER = [42.934, 25.938];
+const DEFAULT_ZOOM = 8;
 
 let minDelta = 0;
 let minDeltaVotes = 0;
@@ -216,9 +262,12 @@ function filterSummary() {
 
 document.getElementById("csvDropdown").addEventListener("change", function(event) {
     const electionId = event.target.value;
-    // The reference list depends on the target election, and the previous
-    // choice may no longer be in it, so it is rebuilt before the redraw.
-    Promise.all([loadCSV(electionId), populateRefDropdown(electionId)])
+    // Both lists depend on the target election and the previous choice may no
+    // longer be in either, so they are rebuilt before the redraw. The scope
+    // goes first because the results request is narrowed by it.
+    populateScopeDropdowns(electionId)
+        .then(() => Promise.all([loadCSV(electionId),
+                                 populateRefDropdown(electionId)]))
         .then(() => updateElection());
 });
 
@@ -227,6 +276,21 @@ document.getElementById("refDropdown").addEventListener("change", function(event
     // Only the deltas change; the target election's own results are already
     // loaded, so there is nothing to re-fetch from /data_for_maps.
     updateElection();
+});
+
+document.getElementById("oblastDropdown").addEventListener("change", function(event) {
+    selectedOblast = event.target.value;
+    // Changing oblast invalidates whatever municipality was picked inside the
+    // old one, so the narrower box resets rather than silently contradicting
+    // the wider one.
+    selectedMun = ALL;
+    renderScopeDropdowns();
+    reloadScope();
+});
+
+document.getElementById("munDropdown").addEventListener("change", function(event) {
+    selectedMun = event.target.value;
+    reloadScope();
 });
 
 document.getElementById("pinsDropdown").addEventListener("change", updatePins);
@@ -273,13 +337,16 @@ function loadCSV(electionId) {
         try {
             // /data_for_maps returns the same payload /grouped_data did, plus
             // `totals` and `abroad`. Abroad is on so the tally is the national
-            // one; those settlements simply have no polygon to draw.
+            // one; those settlements simply have no polygon to draw. Under a
+            // scope it goes off: no station abroad belongs to an oblast, and
+            // leaving it on would put them in every scope's tally.
             const apiResponse = await getMapData({
                 el: electionId,
                 party: selectedParties === 'total' ? null : selectedParties,
                 groupby: 'ekatte',
-                abroad: true,
+                abroad: !scoped(),
                 totals: true,
+                ...scopeParams(),
             });
             electionTotals = apiResponse ? apiResponse.totals : null;
             ballotOrder = apiResponse ? apiResponse.columns : [];
@@ -383,6 +450,89 @@ function populateElectionDropdown() {
 }
 
 /**
+ * Loads the municipality list for `el` and rebuilds both scope dropdowns.
+ *
+ * Only the municipalities the election actually has stations in are offered,
+ * so an old election does not list one that did not exist yet.
+ *
+ * @param {Object} [wanted] - {oblast, mun} codes to restore, from the url.
+ *     Either is dropped if this election does not offer it.
+ */
+async function populateScopeDropdowns(el, wanted = undefined) {
+    const keep = wanted !== undefined
+        ? wanted : { oblast: selectedOblast, mun: selectedMun };
+
+    try {
+        municipalities = await getMunicipalities(el, { detail: true }) || [];
+    } catch (error) {
+        // Without the list there is no scoping, but the countrywide map is
+        // unaffected, so it stays usable.
+        console.error('Could not load municipalities:', error);
+        municipalities = [];
+    }
+
+    const byCode = new Set(municipalities.map(m => m.nuts4));
+    const oblastCodes = new Set(municipalities.map(m => m.oblast_code));
+
+    selectedMun = byCode.has(keep.mun) ? keep.mun : ALL;
+    // A municipality implies its oblast, so the oblast box follows it rather
+    // than being set independently; that keeps the two boxes from ever
+    // disagreeing about what is on screen.
+    selectedOblast = selectedMun
+        ? municipalities.find(m => m.nuts4 === selectedMun).oblast_code
+        : (oblastCodes.has(keep.oblast) ? keep.oblast : ALL);
+
+    renderScopeDropdowns();
+}
+
+/** Fills both scope boxes from `municipalities` and the current selection. */
+function renderScopeDropdowns() {
+    const oblastBox = document.getElementById('oblastDropdown');
+    const munBox = document.getElementById('munDropdown');
+
+    const fill = (box, entries, allLabel, selected) => {
+        box.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = ALL;
+        all.textContent = allLabel;
+        box.appendChild(all);
+        for (const [value, label] of entries) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            box.appendChild(option);
+        }
+        box.value = selected;
+    };
+
+    const oblasts = new Map();
+    for (const m of municipalities) oblasts.set(m.oblast_code, m.oblast);
+    fill(oblastBox, [...oblasts].sort((a, b) => a[1].localeCompare(b[1], 'bg')),
+         'цялата страна', selectedOblast);
+
+    // The municipality list is the chosen oblast's, so the user picks from 20
+    // rather than from 265; with no oblast chosen it is the whole country's.
+    //
+    // The API sorts by oblast then name, which is the order the oblast list
+    // wants but not this one: ungrouped, the names have to run A-Z or the
+    // list cannot be scanned. Within an oblast the two orders agree.
+    const inScope = selectedOblast
+        ? municipalities.filter(m => m.oblast_code === selectedOblast)
+        : [...municipalities].sort((a, b) => a.name.localeCompare(b.name, 'bg'));
+
+    // Бяла (Варна) and Бяла (Русе) sit next to each other in an A-Z list of
+    // all 265 and are otherwise indistinguishable, so a repeated name carries
+    // its oblast. Only the repeats, to keep the common case short.
+    const seen = new Map();
+    for (const m of inScope) seen.set(m.name, (seen.get(m.name) || 0) + 1);
+    const label = (m) => seen.get(m.name) > 1 ? `${m.name} (${m.oblast})`
+                                              : m.name;
+
+    fill(munBox, inScope.map(m => [m.nuts4, label(m)]),
+         selectedOblast ? 'цялата област' : 'всички общини', selectedMun);
+}
+
+/**
  * Rebuilds the reference-election list for `el`.
  *
  * The API decides what is comparable (same family, loaded, not `el` itself),
@@ -434,7 +584,8 @@ function loadMarkerData(file) {
 }
 
 async function matchData(parties, el) { 
-  const deltas = await getDeltas(parties, el, null, selectedRef || null);
+  const deltas = await getDeltas(parties, el, null, selectedRef || null,
+                                scopeParams());
   geojsonData.features.forEach((feature) => {
 
     const match = csvData.find((row) => settlementKey(row.id) === feature.properties.ncode);
@@ -515,7 +666,7 @@ function onEachFeature(feature, layer) {
 }
 
 function initializeMap() {
-  map = L.map('map').setView([42.934, 25.938], 8);
+  map = L.map('map').setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
   var tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   	maxZoom: 19,
@@ -604,8 +755,10 @@ function initializeMap() {
   const party = urlParams.get('party');
   const el = urlParams.get('el');
   const elRef = urlParams.get('el_ref');
+  const wantedScope = { oblast: urlParams.get('oblast') || ALL,
+                        mun: urlParams.get('nuts4') || ALL };
 
-  set_el_and_party(el, party, elRef);
+  set_el_and_party(el, party, elRef, wantedScope);
   
   minDelta =  parseFloat(urlParams.get('minDelta') || 0.);
   minSupport =  parseFloat(urlParams.get('minSupport') || 0.);
@@ -629,7 +782,7 @@ function initializeMap() {
   map.on('moveend zoomend', updateUrlWithMapState);
 }
 
-function set_el_and_party(el, party, elRef = null) {
+function set_el_and_party(el, party, elRef = null, wantedScope = undefined) {
     const csvDropdown = document.getElementById('csvDropdown');
     const options = Array.from(csvDropdown.options).map(option => option.value);
 
@@ -647,8 +800,13 @@ function set_el_and_party(el, party, elRef = null) {
         }
     }
 
-    Promise.all([loadCSV(target),
-                 populateRefDropdown(target, elRef || AUTO_REF)])
+    // The scope has to be resolved before the results are fetched, since it
+    // is part of the request; the dropdowns drop anything this election does
+    // not offer, so a stale link degrades to the whole country.
+    populateScopeDropdowns(target, wantedScope)
+        .then(() => Promise.all([
+            loadCSV(target),
+            populateRefDropdown(target, elRef || AUTO_REF)]))
         .then(() => updateElection());
 }
 
@@ -660,9 +818,11 @@ const updateUrlWithMapState = () => {
     const party = selectedParties;
 
     let newUrl = `${window.location.pathname}?lat=${center.lat}&lng=${center.lng}&zoom=${zoom}&el=${el}&party=${party}&type=${mapType}`;
-    // Only when chosen, so a url with the automatic reference is unchanged
-    // from what this map produced before the reference was selectable.
+    // Only when chosen, so a url with the automatic reference and no scope
+    // is unchanged from what this map produced before either was selectable.
     if (selectedRef) newUrl += `&el_ref=${selectedRef}`;
+    if (selectedOblast) newUrl += `&oblast=${selectedOblast}`;
+    if (selectedMun) newUrl += `&nuts4=${selectedMun}`;
     newUrl += `&minDelta=${minDelta}`;
     newUrl += `&minDeltaVotes=${minDeltaVotes}`;
     newUrl += `&minSupport=${minSupport}`;
@@ -672,11 +832,40 @@ const updateUrlWithMapState = () => {
     window.history.replaceState(null, '', newUrl);
 };
 
+/**
+ * Re-reads the current election through the new scope.
+ *
+ * The results and the deltas are both computed server-side for exactly the
+ * rows in scope, so there is no client-side filtering or re-totalling here --
+ * which is why the figures in the box always agree with what is drawn.
+ */
+function reloadScope() {
+    const el = document.getElementById('csvDropdown').value;
+    return loadCSV(el).then(() => updateElection()).then(() => fitScope());
+}
+
+/**
+ * Moves the view to the scope, or back to the whole country.
+ *
+ * Only on a scope change: the layer is also rebuilt every time a slider
+ * moves, and refitting there would fight the user for control of the map.
+ */
+function fitScope() {
+    if (!scoped()) {
+        map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+        return;
+    }
+    const bounds = geojsonLayer.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+}
+
 function updateElection() {
   
   const el = document.getElementById('csvDropdown').value;
 
-  matchData(selectedParties, el).then(() => {
+  // Returned, because applyFilter rebuilds the layer inside this chain and a
+  // caller that wants to measure the result -- fitScope -- has to wait for it.
+  const drawn = matchData(selectedParties, el).then(() => {
     geojsonLayer.setStyle(feature => {
       return getFeatureColor(feature, mapType);
     });
@@ -685,6 +874,7 @@ function updateElection() {
 
   info.update(undefined, selectedParties);
   updateUrlWithMapState();
+  return drawn;
 }
 
 function updatePartySelection(event) {
@@ -769,11 +959,53 @@ function tableLink(count, filter, description, { abroad = true } = {}) {
         groupby: 'ekatte',
         abroad: abroad ? 'true' : 'false',
     });
+    // The table takes the same scope parameters, so a count in the box and
+    // the rows behind it describe the same territory.
+    const { nuts4, oblast } = scopeParams();
+    if (nuts4) params.set('nuts4', nuts4);
+    if (oblast) params.set('oblast', oblast);
     const layer = (boundary && boundary.id) || SETTLEMENT_LAYER;
     params.set('geojson', layer);
     if (filter) params.set('filter', filter);
     return `<a href="../table.html?${params}" target="_blank"`
         + ` title="виж ${description} в таблица">${nf(count)}</a>`;
+}
+
+/**
+ * The scope in words, or '' countrywide.
+ *
+ * Read off `municipalities`, which is also what filled the dropdowns, so the
+ * box names the same municipality the request was made with.
+ */
+function scopeLabel() {
+    if (selectedMun) {
+        const entry = municipalities.find(m => m.nuts4 === selectedMun);
+        return entry ? `общ. ${entry.name} (обл. ${entry.oblast})` : selectedMun;
+    }
+    if (selectedOblast) {
+        const entry = municipalities.find(
+            m => m.oblast_code === selectedOblast);
+        return entry ? `обл. ${entry.oblast}` : selectedOblast;
+    }
+    return '';
+}
+
+/**
+ * Settlements in scope that held no polling station in this election.
+ *
+ * No link to the table: these settlements have no row anywhere in the
+ * results, so there is nothing for a filter to select.
+ */
+function placesWithoutStation() {
+    const withData = new Set(csvData.map(row => settlementKey(row.id))
+                                    .filter(key => key !== null));
+    let count = 0;
+    for (const feature of geojsonData.features) {
+        if (inScope(feature) && !withData.has(feature.properties.ncode)) {
+            count += 1;
+        }
+    }
+    return count;
 }
 
 /** Rows the boundary file cannot draw, split into domestic and abroad. */
@@ -791,9 +1023,13 @@ function rowsWithoutPolygon() {
 }
 
 /**
- * The whole election's figures, shown when nothing is hovered. The headline
- * tally is the national one, abroad included, so it can be checked against
- * the official result; what the map cannot draw is named separately below.
+ * The figures for what is on the map, shown when nothing is hovered.
+ *
+ * Countrywide the headline tally is the national one, abroad included, so it
+ * can be checked against the official result; what the map cannot draw is
+ * named separately below. Under an oblast or municipality scope it is that
+ * scope's tally instead -- the API totalled exactly the rows it returned --
+ * and the box says which scope, so the number is never read as national.
  */
 function electionTextbox() {
     if (!electionTotals) return 'Посочете населено место.';
@@ -808,6 +1044,8 @@ function electionTextbox() {
     const turnout = selectedParties === 'total';
 
     let textbox = '';
+    const where = scopeLabel();
+    if (where) textbox += `<i>${where}</i><br>`;
     if (filtered) {
         textbox += `<i>Филтър: ${filterSummary()}</i><br>`;
         textbox += `<b>${nf(scope.rows)}</b> от ${nf(electionTotals.rows)} `
@@ -845,13 +1083,19 @@ function electionTextbox() {
     textbox += `Общо: ${tableLink(electionTotals.rows, null, 'всички населени места')} населени места<br>`;
     textbox += `На картата: ${tableLink(drawn, '{on_map} eq 1', 'тези с полигон')}`;
     // Only when a slider is narrowing it further. Counting the drawn layers
-    // would be wrong here: the boundary file holds 5 255 polygons, including
-    // ~1 091 settlements with no polling station in this election, so that
-    // number is not comparable with the others.
+    // would be wrong here: they include the settlements without a station,
+    // reported on their own line below, so that number is not comparable
+    // with the others.
     if (filteredCount !== null) {
         textbox += `, показани сега ${nf(filteredCount)}`;
     }
     textbox += '<br>';
+    // Drawn but empty: in scope, with a polygon, and no station this time.
+    const noStation = placesWithoutStation();
+    if (noStation) {
+        textbox += `Без секция в тези избори: ${nf(noStation)} `
+            + `${noStation === 1 ? 'населено место' : 'населени места'}<br>`;
+    }
     if (missing.home.count) {
         textbox += `Без полигон в страната: `
             + `${tableLink(missing.home.count, '{on_map} eq 0',
@@ -1062,6 +1306,10 @@ function createGeoJsonLayer(geoData, selectedEkatte=null) {
     style: (feature) => style(feature, mapType),
   	onEachFeature: onEachFeature,
     filter: function(feature) {
+      // Another municipality is not drawn at all. A settlement in this one
+      // with no polling station is drawn, with no data, exactly as it is on
+      // the countrywide map.
+      if (!inScope(feature)) return false;
       if (selectedEkatte == null) {
         return true;
       } else {
